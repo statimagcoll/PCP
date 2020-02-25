@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, eval=FALSE)
 path = Sys.getenv('PATH')
 path = Sys.setenv('PATH'=paste(path, '/home/rstudio/.local/bin', sep=':'))
 ```
@@ -15,28 +15,42 @@ path = Sys.setenv('PATH'=paste(path, '/home/rstudio/.local/bin', sep=':'))
 
 configures AWS using access key ID and secret access key provided in csv by user. This sets the default access key and id. To get the access key, in the AWS console, click on your name in top right of the management page, then click security credentials, then click access keys, and click create access key. There should be an option to save as .csv file. This is the format of the csv that `configureAWS` is designed to read.
 
+To setup the dropbox command line interface execute the following line in bash. It then requires you to visit a link to authenticate your session.
+```{bash, eval=FALSE}
+dbxcli du
+```
+
+
+
 ```{r configureAWS}
-configureAWS = function(keycsv, profile='[default]', region='us-east-2', output='json'){
-  dir.create('/home/rstudio/.aws', showWarnings = FALSE)
-  if(!is.null(keycsv)){
-    suppressWarnings(key <- read.table(keycsv, stringsAsFactors = FALSE, sep=',', header = FALSE))
-    id = gsub('.*=', '', key[1,1])
-    key = gsub('.*=', '', key[2,1])
+ # dbxcli = function(cmd, ..., ncores=1){
+ #    result = parallel::mclapply(paste('dbxcli', cmd, do.call(paste, list(...) ) ), system, mc.cores=ncores )
+ #  }
 
-    fileConn<-file("~/.aws/credentials")
-    writeLines(paste0(c('', 'aws_access_key_id=', 'aws_secret_access_key='), c(profile, id , key) ), fileConn)
-    close(fileConn)
+# configureAWS = function(keycsv, profile='[default]', region='us-east-2', output='json'){
+#   dir.create('~/.aws', showWarnings = FALSE)
+#   if(!is.null(keycsv)){
+#     suppressWarnings(key <- read.table(keycsv, stringsAsFactors = FALSE, sep=',', header = FALSE))
+#     id = gsub('.*=', '', key[1,1])
+#     key = gsub('.*=', '', key[2,1])
+# 
+#     fileConn<-file("~/.aws/credentials")
+#     writeLines(paste0(c('', 'aws_access_key_id=', 'aws_secret_access_key='), c(profile, id , key) ), fileConn)
+#     close(fileConn)
+# 
+#     fileConn<-file("~/.aws/config")
+#     writeLines(paste0(c('', 'region=', 'output='), c(profile, region, output)), fileConn)
+#     close(fileConn)
+#   }
+# }
 
-    fileConn<-file("~/.aws/config")
-    writeLines(paste0(c('', 'region=', 'output='), c(profile, region, output)), fileConn)
-    close(fileConn)
-  }
-}
-
-system('dbxcli get aws/aws_keys/vandeks.csv ~/')
+library(NIsim)
+dbxcli('get',  'aws/aws_keys/vandeks.csv',  '~/')
 awskey = '~/vandeks.csv'
 configureAWS(awskey)
 ```
+
+
 
 ## Computing variables
 
@@ -58,17 +72,17 @@ The server location and queue are are then entered in the JSON file that is used
 
 
 This command creates the redis server.
-```{r, startRedisServer}
+```{r, startRedisServer, eval=FALSE}
+library(doRedis)
 # default redis config template
 # only option to change is password
 # doRedis does not appear to support non protected mode
-system('dbxcli get redis/redisTemplate.conf ~/')
+dbxcli('get', 'redis/redisTemplate.conf', '~/')
 redisConfTemplate = '~/redisTemplate.conf'
 redisConf = '~/redis.conf'
 # insert password into file
 system(paste0('sed s/###PASSWORD###/', compute.config$password, '/ ', redisConfTemplate, ' > ', redisConf))
 system(paste0('redis-server ', redisConf), wait=FALSE)
-library(doRedis)
 registerDoRedis(compute.config$queuename, nodelay=FALSE, password=compute.config$password)
 ```
 
@@ -76,9 +90,8 @@ registerDoRedis(compute.config$queuename, nodelay=FALSE, password=compute.config
 ## Setup the simulations
 The commands are evaluated within the docker image.
 ```{r, dockerHostTest, eval=FALSE}
-library(doRedis)
 startLocalWorkers(n=compute.config$ncores, queue=compute.config$queuename, host=compute.config$host, password = compute.config$password,
-                  nodelay=FALSE, linger=60*10, timeout=60*10)
+                  nodelay=FALSE, linger=60*10*24, timeout=60*10*24)
 ```
 
 
@@ -93,7 +106,7 @@ test = foreach(i=1:10, .combine=c) %dopar% {
 ## Setup simulations and upload to dropbox
 This code creates the simulation setup files and (optionally) pushes them to dropbox. Data are downloaded from dropbox into the docker image. When it is closed all local data are deleted.
 
-```{r}
+```{r, eval=FALSE}
 ### LIBRARIES ###
 library(RNifti)
 library(parallel)
@@ -168,7 +181,9 @@ sim.config = list(
   form = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan + ns(fake_covariate, df=4)" )),
   formred = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan + fake_covariate")),
   # variance estimator variable for deweighting
-  varvar = c("func_mean_fd")
+  varvar = c("func_mean_fd"),
+  outdir = '~/spline_nullsim',
+  dat = dat
 )
 # use betas = 0 for global null
 # parameters = betas * sd(y)/sd(x).
@@ -178,11 +193,15 @@ sim.config$betas = rep(0, length(sim.config$rs))
 
 ### SETUP THE SIMULATION ANALYSIS ###
 # subsets dataset to all people who have the variables
-dat = dat[apply(!is.na(dat[ ,c(all.vars(as.formula(sim.config$formres)), sim.config$varvar)]), 1, all), ]
-dat$rfiles = file.path('~/data/res_images', basename(dat$images))
-
-
-pbj::residualizeImages(files=dat$images, dat=dat, mask=maskfile, form=sim.config$formres, outfiles=dat$rfiles, mc.cores=compute.config$ncores)
+sim.config$dat = sim.config$dat[apply(!is.na(sim.config$dat[ ,c(all.vars(as.formula(sim.config$formres)), sim.config$varvar)]), 1, all), ]
+if(class(sim.config$formres)=='formula' | is.character(sim.config$formres)){
+  sim.config$dat$rfiles = file.path('~/data/res_images', basename(sim.config$dat$images))
+  pbj::residualizeImages(files=sim.config$dat$images, dat=sim.config$dat, mask=maskfile, form=sim.config$formres,
+                         outfiles=sim.config$dat$rfiles, mc.cores=compute.config$ncores)
+  sim.config$dat$images = sim.config$dat$rfiles
+  # clean up! Rstudio for some reason doesn't immediately free memory from loading in a lot of images.
+  gc()
+}
 
 # output directories. Probably won't need these with doRedis
 #name=paste(dataset, paste(gsub(" +", "_", gsub(" +$|^ +", "", gsub("[[:punct:]]", "", form))),
@@ -191,6 +210,7 @@ pbj::residualizeImages(files=dat$images, dat=dat, mask=maskfile, form=sim.config
 #formred = as.formula(formred)
 
 
+NIsim::simSetup(dat$rfiles, data=dat, outdir=sim.config$outdir)
 
 
 

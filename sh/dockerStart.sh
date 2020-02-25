@@ -1,7 +1,7 @@
 #!/bin/zsh
 # This is run on the local machine (e.g. your laptop) to start an rstudio docker image
 # start docker, in case you haven't already
-eval "$(docker-machine env default)"
+#eval "$(docker-machine env default)"
 # start rstudio with pbj docker instance. Port forwarding for rstudio and redis mapping dropbox drive
 # 8787 is port for rstudio
 # 6379 is port for redis
@@ -56,5 +56,12 @@ docker run -p 8787:8787 -p 6379:6379 -e ROOT=TRUE -e DISABLE_AUTH=true pbj:lates
 # docker run -p 8787:8787 -p 6379:6379 -e ROOT=TRUE  -v "/home/ubuntu/dropbox:/home/rstudio/dropbox" -e DISABLE_AUTH=true pbj:latest
 # docker run -p 8787:8787 -p 6379:6379 -e ROOT=TRUE  -e DISABLE_AUTH=true pbj:latest
 
+
+# To increase memory available to docker open virtualbox and close machine. Then adjust memory and restart machine. Then open new terminal and start new docker image.
+# This will be different on linux.
+
+VBoxManage controlvm "default" poweroff
+VBoxManage modifyvm "default" --memory 8192
+VBoxManage startvm "default" --type headless
 
 

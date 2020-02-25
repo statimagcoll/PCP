@@ -6,13 +6,13 @@
 #' @param data A dataframe with number of rows equal to the length of the images variable with corresponding covariates.
 #' @param outdir A directory to save the output files that are used for the simulations.
 #' @param nsim Number of simulations to setup for each sample size.
-#' @param n Sample sizes to evaluate for each simulation. Should be less than the number of images.
+#' @param ns Sample sizes to evaluate for each simulation. Should be less than the number of images.
 #' @param mask If performing simulations under an alternative, signal can be added to the images within the mask.
 #' @param rs vector of radii for signal spheres.
 #' @param betas vector of parameters for signal spheres. Signal is constant throughout the sphere.
 #' @return Returns a matrix of directories where simulation setup files are stored.
 #' @importFrom RNifti readNifti writeNifti
-#' @importFrom doRedis %dopar%
+#' @importFrom foreach foreach %dopar%
 #' @export
 # prepare the output directories
 # All the randomization happens within this loop
@@ -20,7 +20,7 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
   sims = expand.grid(sim=1:nsim, n=ns, simdir=NA)
   data$images = images
   if(any(betas!=0) & is.null(mask)) stop('mask must be provided if simulating under an alternative.')
-  for(simind in 1:nrow(sims)) %dopar% {
+  foreach(simind=1:nrow(sims), .combine=list) %dopar% {
     simdir = sims$simdir[simind] = file.path(outdir, paste0('sim', sims[simind,'sim']), paste0('n', n) )
     n = sims[simind, 'n']
     dir.create(file.path(simdir, paste0('n',n)), showWarnings=FALSE, recursive = TRUE)
@@ -29,13 +29,11 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
     # mask it with the (gray matter) mask.
     if(any(betas!=0)) parameterImage(mask, parameterImage = file.path(outdir, 'signal.nii.gz'), rs, betas)
     # create random sample from demographics and roi data
-    tempdata = data[sample.int(nrow(dat), n, replace=TRUE), ]
-    tempdata$W1 = 1
-    tempdata$W2 = 1/tempdata[,varvar]
+    tempdata = data[sample.int(nrow(data), n, replace=TRUE), ]
     saveRDS(tempdata, file=file.path(simdir,'data.rds' ) )
-  }
+  }# end for(sim)
   sims
-}# end for(sim)
+}
 
 
   #' Creates parameter image in random locations for simulations
@@ -52,7 +50,7 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
   #' @importFrom RNifti readNifti writeNifti
   #' @export
   parameterImage = function(mask, parameterImage, rs, betas){
-    if(is.character(mask)) mask = RNifti::readNifti(mask)
+    if(is.character(mask)) mask = readNifti(mask)
     outfile = mask
     inds = which(mask==1, arr.ind=TRUE)
     # random location in gray matter mask for center voxel
@@ -78,9 +76,49 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
   #' Interface to command line tool for dropbox
   #'
   #' @param cmd String indicating command to run.
-  #' @param args String of arguments passed to command.
+  #' @param ... arguments passed to command.
+  #' @param ncores number of vectors of commands.
   #' @importFrom parallel mclapply
   #' @export
   dbxcli = function(cmd, ..., ncores=1){
     result = parallel::mclapply(paste('dbxcli', cmd, do.call(paste, list(...) ) ), system, mc.cores=ncores )
+  }
+
+
+
+  #' Configure AWS
+  #'
+  #' Configures AWS using access key ID and secret access key provided in csv by user.
+  #' Need to run on master. This sets the default access key and id.
+  #' to get access key, click on name in top right of the management page, click security credentials, click access keys, click create access key.
+  #' @param keycsv character path to csv file obtained from AWS containing the id and key.
+  #' @param profile character username to setup profile.
+  #' @param region character amazon region to use.
+  #' @param output character amazon default output from aws command line interface tool.
+  #' @export
+  #' @importFrom utils read.table
+  configureAWS = function(keycsv, profile='default', region='us-east-2', output='json'){
+    dir.create('/home/rstudio/.aws', showWarnings = FALSE)
+    if(!is.null(keycsv)){
+      suppressWarnings(key <- read.table(keycsv, stringsAsFactors = FALSE, sep=',', header = FALSE))
+      id = gsub('.*=', '', key[1,1])
+      key = gsub('.*=', '', key[2,1])
+
+      fileConn<-file("~/.aws/credentials")
+      writeLines(c(profile, id , key), fileConn)
+      close(fileConn)
+
+      fileConn<-file("~/.aws/config")
+      writeLines(c(profile, region, output), fileConn)
+      close(fileConn)
+    }
+  }
+
+  #' List memory usage of all objects
+  #'
+  #' @param units character what units to use, passed to format for object.size.
+  #' @export
+  #' @importFrom utils object.size
+  memoryUse = function(units='MiB'){
+    sort( sapply(ls(),function(x){format(object.size(get(x)), units=units)}))
   }
