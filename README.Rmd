@@ -55,7 +55,7 @@ configureAWS(awskey)
 ## Computing variables
 
 ```{r, redisVariables}
-compute.config = list(
+computeConfig = list(
   queuename = 'pbj',
   host = gsub('^.*://|:.*$', '', Sys.getenv('RSTUDIO_HTTP_REFERER')),
   # password for this redis session
@@ -81,16 +81,16 @@ dbxcli('get', 'redis/redisTemplate.conf', '~/')
 redisConfTemplate = '~/redisTemplate.conf'
 redisConf = '~/redis.conf'
 # insert password into file
-system(paste0('sed s/###PASSWORD###/', compute.config$password, '/ ', redisConfTemplate, ' > ', redisConf))
+system(paste0('sed s/###PASSWORD###/', computeConfig$password, '/ ', redisConfTemplate, ' > ', redisConf))
 system(paste0('redis-server ', redisConf), wait=FALSE)
-registerDoRedis(compute.config$queuename, nodelay=FALSE, password=compute.config$password)
+registerDoRedis(computeConfig$queuename, nodelay=FALSE, password=computeConfig$password)
 ```
 
 
 ## Setup the simulations
 The commands are evaluated within the docker image.
 ```{r, dockerHostTest, eval=FALSE}
-startLocalWorkers(n=compute.config$ncores, queue=compute.config$queuename, host=compute.config$host, password = compute.config$password,
+startLocalWorkers(n=computeConfig$ncores, queue=computeConfig$queuename, host=computeConfig$host, password = computeConfig$password,
                   nodelay=FALSE, linger=60*10*24, timeout=60*10*24)
 ```
 
@@ -143,7 +143,7 @@ dat$imgname = paste(dat$file_id, 'alff.nii.gz', sep='_')
 dat$images = file.path(datadir, dat$imgname)
 dbimages = file.path(dbimagedir, dat$imgname)
 # download the images from dropbox
-dbxcli('get', dbimages, dat$images, ncores=compute.config$ncores)
+dbxcli('get', dbimages, dat$images, ncores=computeConfig$ncores)
 maskfile = '~/mask.nii.gz'
 dbmaskfile = 'pbj/data/abide/neuroimaging/MNI152_T1_3mm.nii.gz'
 dbxcli('get', dbmaskfile, maskfile)
@@ -158,7 +158,7 @@ dbxcli('get', dbmaskfile, maskfile)
 
 
 ### SIMULATION PARAMETERS ###
-sim.config = list(
+simConfig = list(
   robust = TRUE, # use robust variance estimator?
   # vector of sample sizes to simulate
   ns = c(50),
@@ -187,18 +187,18 @@ sim.config = list(
 )
 # use betas = 0 for global null
 # parameters = betas * sd(y)/sd(x).
-sim.config$betas = rep(0, length(sim.config$rs))
+simConfig$betas = rep(0, length(simConfig$rs))
 
 
 
 ### SETUP THE SIMULATION ANALYSIS ###
 # subsets dataset to all people who have the variables
-sim.config$dat = sim.config$dat[apply(!is.na(sim.config$dat[ ,c(all.vars(as.formula(sim.config$formres)), sim.config$varvar)]), 1, all), ]
-if(class(sim.config$formres)=='formula' | is.character(sim.config$formres)){
-  sim.config$dat$rfiles = file.path('~/data/res_images', basename(sim.config$dat$images))
-  pbj::residualizeImages(files=sim.config$dat$images, dat=sim.config$dat, mask=maskfile, form=sim.config$formres,
-                         outfiles=sim.config$dat$rfiles, mc.cores=compute.config$ncores)
-  sim.config$dat$images = sim.config$dat$rfiles
+simConfig$dat = simConfig$dat[apply(!is.na(simConfig$dat[ ,c(all.vars(as.formula(simConfig$formres)), simConfig$varvar)]), 1, all), ]
+if(class(simConfig$formres)=='formula' | is.character(simConfig$formres)){
+  simConfig$dat$rfiles = file.path('~/data/res_images', basename(simConfig$dat$images))
+  pbj::residualizeImages(files=simConfig$dat$images, dat=simConfig$dat, mask=maskfile, form=simConfig$formres,
+                         outfiles=simConfig$dat$rfiles, mc.cores=computeConfig$ncores)
+  simConfig$dat$images = simConfig$dat$rfiles
   # clean up! Rstudio for some reason doesn't immediately free memory from loading in a lot of images.
   gc()
 }
@@ -209,8 +209,8 @@ if(class(sim.config$formres)=='formula' | is.character(sim.config$formres)){
 #form = as.formula(form)
 #formred = as.formula(formred)
 
-
-NIsim::simSetup(dat$rfiles, data=dat, outdir=sim.config$outdir)
+debug(NIsim::simSetup)
+NIsim::simSetup(simConfig$dat$rfiles, data=simConfig$dat, outdir=simConfig$outdir)
 
 
 
