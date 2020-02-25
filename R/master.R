@@ -21,7 +21,7 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
   data$images = images
   if(any(betas!=0) & is.null(mask)) stop('mask must be provided if simulating under an alternative.')
   foreach(simind=1:nrow(sims), .combine=list) %dopar% {
-    simdir = sims$simdir[simind] = file.path(outdir, paste0('sim', sims[simind,'sim']), paste0('n', n) )
+    simdir = sims$simdir[simind] = file.path(outdir, paste0('sim', sims[simind,'sim']), paste0('n', sims[simind,'n']) )
     n = sims[simind, 'n']
     dir.create(file.path(simdir, paste0('n',n)), showWarnings=FALSE, recursive = TRUE)
     unlink(file.path(simdir, '*.nii.gz'), recursive=TRUE)
