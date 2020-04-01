@@ -12,7 +12,7 @@
 #' @param betas vector of parameters for signal spheres. Signal is constant throughout the sphere.
 #' @return Returns a matrix of directories where simulation setup files are stored.
 #' @importFrom RNifti readNifti writeNifti
-#' @importFrom foreach foreach %dopar%
+#' @importFrom parallel mclapply
 #' @export
 # prepare the output directories
 # All the randomization happens within this loop
@@ -75,6 +75,21 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
   }
 
 
+  #' Runs simulations
+  #'
+  #' Uses the mask variable to create length(rs) spheres of size rs with values equal to betas within the mask.
+  #' A random voxel is chosen within the mask and a sphere is placed at that location.
+  #' The spheres are masked by the mask image so that no parameter values exist outside the mask.
+  #' @param simdirs Vector of simulation directories created by simSetup.
+  #' @param simfunc Function to evaluate on the simulated data.
+  #' @param method Method to generate sample data, either by bootstrapping or synthetically.
+  #' @param ncores Number of cores to use.
+  #' @return Returns the parameter image after writing it to file.path(outdir, 'signal.nii.gz').
+  #' @importFrom RNifti readNifti writeNifti
+  #' @export
+  runSim = function(simdata, simfunc, method=c('bootstrap', 'synthetic'), ncores=parallel::detectCores()){
+    mclapply()
+  }
 
 
   #' List memory usage of all objects

@@ -10,8 +10,7 @@ Encoding: UTF-8
 Collate:
   'master.R'
 Imports:
-  doRedis,
-  foreach,
-  RNifti
+  RNifti,
+  parallel
 LazyData: true
-RoxygenNote: 6.1.1
+RoxygenNote: 7.1.0

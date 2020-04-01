@@ -19,7 +19,7 @@ The `Welcome.R` script in the [NIsim](https://github.com/simonvandekar/NIsim) pa
 
 ## Setup simulations
 
-```{r, eval=FALSE}
+```{r simconfig, eval=FALSE}
 ### LIBRARIES ###
 library(RNifti)
 library(parallel)
@@ -96,25 +96,30 @@ simConfig = list(
 # use betas = 0 for global null
 # parameters = betas * sd(y)/sd(x).
 simConfig$betas = rep(0, length(simConfig$rs))
-
-
-
+```
+```{r simsetup}
 ### SETUP THE SIMULATION ANALYSIS ###
 # subsets dataset to all people who have the variables
 simConfig$dat = simConfig$dat[apply(!is.na(simConfig$dat[ ,c(all.vars(as.formula(simConfig$formres)), simConfig$W)]), 1, all), ]
+# Create residualized images
 if(class(simConfig$formres)=='formula' | is.character(simConfig$formres)){
   simConfig$dat$rfiles = file.path(tempdir(), 'res_images', basename(simConfig$dat$images))
+  if(!all(file.exists(simConfig$dat$rfiles))){
   pbj::residualizeImages(files=simConfig$dat$images, dat=simConfig$dat, mask=simConfig$mask, form=simConfig$formres,
                          outfiles=simConfig$dat$rfiles, mc.cores=computeConfig$ncores)
+}
   simConfig$dat$images = simConfig$dat$rfiles
   # clean up. May not be necessary
   gc()
 }
 
 
-debug(simSetup)
+devtools::load_all('./')
 simdirs = simSetup(simConfig$dat$images, data=simConfig$dat, outdir=simConfig$outdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
 
 
 
+
+
 ```
+

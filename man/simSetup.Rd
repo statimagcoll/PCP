@@ -4,8 +4,17 @@
 \alias{simSetup}
 \title{Sets up a Neuroimaging bootstrap-based simulation given a set of images and covariates.}
 \usage{
-simSetup(images, data, outdir, nsim = 1000, ns = c(50, 100, 200, 400),
-  mask = NULL, rs = 8, betas = rep(0, length(rs)))
+simSetup(
+  images,
+  data,
+  outdir,
+  nsim = 1000,
+  ns = c(50, 100, 200, 400),
+  mask = NULL,
+  rs = 8,
+  betas = rep(0, length(rs)),
+  ncores = parallel::detectCores()
+)
 }
 \arguments{
 \item{images}{String vector containing paths to the images used for the simulation.}
