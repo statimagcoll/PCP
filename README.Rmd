@@ -47,7 +47,7 @@ dat = readRDS(dbdatafile)
 dat$fake_covariate = rnorm(nrow(dat))
 dat$fake_group = factor(sample(1:4, nrow(dat), replace=TRUE))
 dat$imgname = paste(dat$file_id, 'alff.nii.gz', sep='_')
-dat$images = file.path(dbimagedir, dat$imgname)
+dat$files = file.path(dbimagedir, dat$imgname)
 
 
 
@@ -69,7 +69,7 @@ simConfig = list(
   # vector of sample sizes to simulate
   ns = c(50, 100, 200, 400),
   # number of simulations to run
-  nsim=100,
+  nsim=3,
   # number of bootstraps
   nboot = 0,
   # number of permutations
@@ -103,22 +103,32 @@ simConfig$betas = rep(0, length(simConfig$rs))
 simConfig$dat = simConfig$dat[apply(!is.na(simConfig$dat[ ,c(all.vars(as.formula(simConfig$formres)), simConfig$W)]), 1, all), ]
 # Create residualized images
 if(class(simConfig$formres)=='formula' | is.character(simConfig$formres)){
-  simConfig$dat$rfiles = file.path(tempdir(), 'res_images', basename(simConfig$dat$images))
+  simConfig$dat$rfiles = file.path(tempdir(), 'res_images', basename(simConfig$dat$files))
   if(!all(file.exists(simConfig$dat$rfiles))){
-  pbj::residualizeImages(files=simConfig$dat$images, dat=simConfig$dat, mask=simConfig$mask, form=simConfig$formres,
+  pbj::residualizeImages(files=simConfig$dat$files, dat=simConfig$dat, mask=simConfig$mask, form=simConfig$formres,
                          outfiles=simConfig$dat$rfiles, mc.cores=computeConfig$ncores)
 }
-  simConfig$dat$images = simConfig$dat$rfiles
+  simConfig$dat$files = simConfig$dat$rfiles
   # clean up. May not be necessary
   gc()
 }
 
 
 devtools::load_all('./')
-simdirs = simSetup(simConfig$dat$images, data=simConfig$dat, outdir=simConfig$outdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
+simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$outdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
 
-
-
+# simfunc should contain a data argument, which is defined within runSim
+# Other arguments are identical across simulation runs.
+simFunc = function(lmfull, lmred, mask, data){
+  lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't')$stat
+}
+simres = runSim(simdirs$simdir[1:2],
+       simfunc = simFunc, mask = simConfig$mask,
+simfuncArgs = list(
+  lmfull= simConfig$form,
+  lmred = simConfig$formred,
+  mask = simConfig$mask)
+)
 
 
 ```
