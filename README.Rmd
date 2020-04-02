@@ -92,7 +92,7 @@ simConfig = list(
   outdir = '~/spline_nullsim',
   dat = dat,
   mask = maskfile,
-  rdsOutput = '~/Dropbox (VUMC)/pbj/pbj_ftest/transform_images.rds')
+  output = '~/Dropbox (VUMC)/pbj/pbj_ftest/transform_images.rdata'
 )
 # use betas = 0 for global null
 # parameters = betas * sd(y)/sd(x).
@@ -147,7 +147,8 @@ simfuncArgs = list(
 dir.create(basename(simConfig$rdsOutput), showWarnings = FALSE, recursive = TRUE)
 
 # clean up files
-saveRDS(simdirs, file=simConfig$rdsOutput)
+save.image(file=simConfig$output)
+Sys.sleep(5*60)
 unlink(list.files(tempdir(), full.names = TRUE))
 gc()
 system('sudo shutdown -h now')
