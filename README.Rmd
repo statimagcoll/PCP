@@ -38,7 +38,7 @@ library(pbj)
 dbimagedir = '~/Dropbox/pbj/data/abide/neuroimaging/cpac/alff'
 dbresimagedir = '~/Dropbox/pbj/data/abide/neuroimaging/cpac/alff_resid'
 dbdatafile = '~/Dropbox/pbj/data/abide/demographic/n1035_phenotypic_20190509.rds'
-maskfile = '~/Dropbox/pbj/data/abide/neuroimaging/MNI152_T1_3mm.nii.gz'
+maskfile = '~/Dropbox/pbj/data/abide/neuroimaging/cpac/n1035_mask.nii.gz'
 
 
 # load in data and get directories
@@ -69,7 +69,7 @@ simConfig = list(
   # vector of sample sizes to simulate
   ns = c(50, 100, 200, 400),
   # number of simulations to run
-  nsim=3,
+  nsim=100,
   # number of bootstraps
   nboot = 0,
   # number of permutations
@@ -91,12 +91,15 @@ simConfig = list(
   # where to output results
   outdir = '~/spline_nullsim',
   dat = dat,
-  mask = maskfile
+  mask = maskfile,
+  rdsOutput = '~/Dropbox (VUMC)/pbj/pbj_ftest/transform_images.rds')
 )
 # use betas = 0 for global null
 # parameters = betas * sd(y)/sd(x).
 simConfig$betas = rep(0, length(simConfig$rs))
 ```
+
+
 ```{r simsetup}
 ### SETUP THE SIMULATION ANALYSIS ###
 # subsets dataset to all people who have the variables
@@ -116,20 +119,37 @@ if(class(simConfig$formres)=='formula' | is.character(simConfig$formres)){
 
 devtools::load_all('./')
 simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$outdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
+```
 
+```{r runSims}
 # simfunc should contain a data argument, which is defined within runSim
 # Other arguments are identical across simulation runs.
 simFunc = function(lmfull, lmred, mask, data){
-  lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't')$stat
+  list('t'=lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't')$stat,
+  'edgeworth'=lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'edgeworth')$stat,
+  'none'=lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'none')$stat
+  )
 }
-simres = runSim(simdirs$simdir[1:2],
+
+# simConfig$dat$images = simConfig$dat$files
+# simFunc(lmfull= simConfig$form,
+#   lmred = simConfig$formred,
+#   mask = simConfig$mask,
+#   data=simConfig$dat[1:50,])
+
+simdirs$simres = runSim(simdirs$simdir,
        simfunc = simFunc, mask = simConfig$mask,
 simfuncArgs = list(
   lmfull= simConfig$form,
   lmred = simConfig$formred,
-  mask = simConfig$mask)
-)
+  mask = simConfig$mask), ncores = computeConfig$ncores)
 
+dir.create(basename(simConfig$rdsOutput), showWarnings = FALSE, recursive = TRUE)
 
+# clean up files
+saveRDS(simdirs, file=simConfig$rdsOutput)
+unlink(list.files(tempdir(), full.names = TRUE))
+gc()
+system('sudo shutdown -h now')
 ```
 

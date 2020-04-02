@@ -20,7 +20,7 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
   sims = expand.grid(sim=1:nsim, n=ns, simdir=NA)
   data$images = images
   if(any(betas!=0) & is.null(mask)) stop('mask must be provided if simulating under an alternative.')
-  sims$simdir = do.call(c, pbmclapply(1:nrow(sims), function(simind) {
+  sims$simdir = do.call(c, pbmcapply::pbmclapply(1:nrow(sims), function(simind) {
     simdir = file.path(outdir, paste0('sim', sims[simind,'sim']), paste0('n', sims[simind,'n']) )
     n = sims[simind, 'n']
     dir.create(simdir, showWarnings=FALSE, recursive = TRUE)

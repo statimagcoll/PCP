@@ -30,7 +30,7 @@ genSimData = function(files, outfiles=NULL, betaimg=NULL, mask=NULL, method=c('b
     rm(y)
     } else if(tolower(method[1])=='bootstrap'){
       # the bootstrapping has already been performed in the simulation Setup phase
-      file.copy(files, outfiles)
+      result = file.copy(files, outfiles)
     } else{
       stop('genSimData method is not correctly specified.')
     }
