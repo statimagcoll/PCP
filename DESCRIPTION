@@ -8,9 +8,11 @@ Description: More about what it does (maybe more than one line)
 License: GPL-3
 Encoding: UTF-8
 Collate:
+  'genSimData.R'
   'master.R'
 Imports:
-  RNifti,
-  parallel
+  pbmcapply,
+  parallel,
+  RNifti
 LazyData: true
 RoxygenNote: 7.1.0

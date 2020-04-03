@@ -93,7 +93,7 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
   #' @importFrom pbj addSignal
   #' @export
   runSim = function(simdirs, simfunc, simfuncArgs=NULL, mask=NULL, method=c('bootstrap', 'synthetic'), ncores=parallel::detectCores(), ...){
-    pbmclapply(simdirs, function(simdir, simfunc, method, mask){
+    result = pbmcapply::pbmclapply(simdirs, function(simdir, simfunc, method, mask){
       # load data
       dat = readRDS(file.path(simdir, 'data.rds'))
 
@@ -108,7 +108,9 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
 
       simfuncArgs$data = dat
       result = do.call(simfunc, args = simfuncArgs)
+      unlink(dat$images)
     }, simfunc = simfunc, method = method, mask=mask, mc.cores = ncores, ...)
+    return(result)
   }
 
 
