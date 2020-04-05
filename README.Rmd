@@ -131,13 +131,13 @@ simFunc = function(lmfull, lmred, mask, data){
   )
 }
 
-simConfig$dat$images = simConfig$dat$files
-test2 = simFunc(lmfull= simConfig$form,
-  lmred = simConfig$formred,
-  mask = simConfig$mask,
-  data=simConfig$dat[1:50,])
+# simConfig$dat$images = simConfig$dat$files
+# test2 = simFunc(lmfull= simConfig$form,
+#   lmred = simConfig$formred,
+#   mask = simConfig$mask,
+#   data=simConfig$dat[1:50,])
 
-results = runSim(simdirs$simdir,
+results = runSim(simdirs$simdir[1],
        simfunc = simFunc, mask = simConfig$mask,
 simfuncArgs = list(
   lmfull= simConfig$form,

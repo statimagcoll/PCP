@@ -102,7 +102,7 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
       sigfile = if(file.exists(sigfile)) sigfile else NULL
       # create names for temporary files
       dat$tmpfiles = tempfile(paste0(basename(dirname(simdir)), '/s', 1:nrow(dat)), fileext='.nii.gz')
-      dir.create(basename(dat$tmpfiles), recursive=TRUE, showWarnings = FALSE)
+      dir.create(dirname(dat$tmpfiles[1]), recursive=TRUE, showWarnings = FALSE)
       genSimData(files=dat$images, outfiles=dat$tmpfiles, betaimg=sigfile, mask=mask, method=method)
       # adds artificial signal to images
       dat$images = dat$tmpfiles
