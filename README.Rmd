@@ -131,23 +131,23 @@ simFunc = function(lmfull, lmred, mask, data){
   )
 }
 
-# simConfig$dat$images = simConfig$dat$files
-# simFunc(lmfull= simConfig$form,
-#   lmred = simConfig$formred,
-#   mask = simConfig$mask,
-#   data=simConfig$dat[1:50,])
+simConfig$dat$images = simConfig$dat$files
+test2 = simFunc(lmfull= simConfig$form,
+  lmred = simConfig$formred,
+  mask = simConfig$mask,
+  data=simConfig$dat[1:50,])
 
-simdirs$simres = runSim(simdirs$simdir,
+results = runSim(simdirs$simdir,
        simfunc = simFunc, mask = simConfig$mask,
 simfuncArgs = list(
   lmfull= simConfig$form,
   lmred = simConfig$formred,
   mask = simConfig$mask), ncores = computeConfig$ncores)
 
-dir.create(basename(simConfig$rdsOutput), showWarnings = FALSE, recursive = TRUE)
+dir.create(dirname(simConfig$output), showWarnings = FALSE, recursive = TRUE)
 
 # clean up files
-save.image(file=simConfig$output)
+save.image(file="~/Dropbox/pbj/pbj_ftest/transform_images.rdata")
 Sys.sleep(5*60)
 unlink(list.files(tempdir(), full.names = TRUE))
 gc()
