@@ -125,10 +125,10 @@ simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$out
 # simfunc should contain a data argument, which is defined within runSim
 # Other arguments are identical across simulation runs.
 simFunc = function(lmfull, lmred, mask, data){
-  list('t'=lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't')$stat,
+  simplify2array(list('t'=lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't')$stat,
   'edgeworth'=lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'edgeworth')$stat,
   'none'=lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'none')$stat
-  )
+  ) )
 }
 
 # simConfig$dat$images = simConfig$dat$files
@@ -137,7 +137,7 @@ simFunc = function(lmfull, lmred, mask, data){
 #   mask = simConfig$mask,
 #   data=simConfig$dat[1:50,])
 
-results = runSim(simdirs$simdir[1],
+results = runSim(simdirs$simdir,
        simfunc = simFunc, mask = simConfig$mask,
 simfuncArgs = list(
   lmfull= simConfig$form,
@@ -152,5 +152,8 @@ Sys.sleep(5*60)
 unlink(list.files(tempdir(), full.names = TRUE))
 gc()
 system('sudo shutdown -h now')
+
+# summarize the results
+# apply(rowMeans(simplify2array(x[!is.na(x)]), dims = 2), 2, quantile)
 ```
 
