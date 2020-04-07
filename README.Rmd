@@ -137,7 +137,7 @@ simFunc = function(lmfull, lmred, mask, data){
 #   mask = simConfig$mask,
 #   data=simConfig$dat[1:50,])
 
-results = runSim(simdirs$simdir,
+results = runSim(simdirs$simdir[1], method='synthetic',
        simfunc = simFunc, mask = simConfig$mask,
 simfuncArgs = list(
   lmfull= simConfig$form,
@@ -155,5 +155,16 @@ system('sudo shutdown -h now')
 
 # summarize the results
 # apply(rowMeans(simplify2array(x[!is.na(x)]), dims = 2), 2, quantile)
+```
+
+```{r, eval=FALSE}
+load('~/Dropbox (VUMC)/pbj/pbj_ftest/synthsim_transform_images.rdata')
+simdirs$results = lapply(results, simplify2array)
+x =simdirs[simdirs$n==100,]
+simdirs$results[ !sapply(simdirs$results, is.numeric) ] = NA
+by(simdirs, simdirs$n, function(x) sum(!is.na(x$results)))
+by(simdirs, simdirs$n, function(x) apply(rowMeans(simplify2array(x$results[!is.na(x$results)]), dims = 2), 2, quantile))
+by(simdirs, simdirs$n, function(x) apply(apply(simplify2array(x$results[!is.na(x$results)]), 1:2, var ), 2, quantile, na.rm=TRUE) )
+by(simdirs, simdirs$n, function(x) apply(apply(simplify2array(x$results[!is.na(x$results)]), 1:2, function(y) sd(y)/sqrt(length(y)) ), 2, mean) )
 ```
 
