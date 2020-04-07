@@ -20,8 +20,8 @@ genSimData = function(files, outfiles=NULL, betaimg=NULL, mask=NULL, method=c('b
   if(is.null(betaimg)) {
     if(tolower(method[1])=='synthetic'){
       # contains residuals for entire study
-    cov = readRDS(file.path(dirname(dat$images[1]), 'residuals.RDS'))
-    y = matrix(rnorm(nrow(cov)*length(files)), nrow=n, ncol=nrow(cov))  %*% cov
+    cov = readRDS(file.path(dirname(files[1]), 'residuals.RDS'))
+    y = matrix(rnorm(nrow(cov)*length(files)), nrow=length(files), ncol=nrow(cov))  %*% cov
     rm(cov)
     temp = if(is.character(mask)) readNifti(mask) else mask
     trash = lapply(1:nrow(y), function(ind){ temp[ temp==1] = y[ind,]
