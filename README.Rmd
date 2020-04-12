@@ -29,16 +29,17 @@ library(fslr)
 library(progress)
 library(abind)
 library(pbj)
+library(PDQutils)
 
 
 
 
 
 ### LOAD IN DATA FROM DROPBOX ###
-dbimagedir = '~/Dropbox/pbj/data/abide/neuroimaging/cpac/alff'
+dbimagedir = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/alff_cropped'
 dbresimagedir = '~/Dropbox/pbj/data/abide/neuroimaging/cpac/alff_resid'
 dbdatafile = '~/Dropbox/pbj/data/abide/demographic/n1035_phenotypic_20190509.rds'
-maskfile = '~/Dropbox/pbj/data/abide/neuroimaging/cpac/n1035_mask.nii.gz'
+maskfile = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/cropped_n1035_mask.nii.gz'
 
 
 # load in data and get directories
@@ -54,7 +55,7 @@ dat$files = file.path(dbimagedir, dat$imgname)
 ### COMPUTING PARAMETERS ###
 computeConfig = list(
   # number of cores to use for computing
-  ncores = parallel::detectCores()
+  ncores = 20
 )
 
 
@@ -137,7 +138,7 @@ simFunc = function(lmfull, lmred, mask, data){
 #   mask = simConfig$mask,
 #   data=simConfig$dat[1:50,])
 
-results = runSim(simdirs$simdir[1], method='synthetic',
+results = runSim(simdirs$simdir, method='synthetic',
        simfunc = simFunc, mask = simConfig$mask,
 simfuncArgs = list(
   lmfull= simConfig$form,
