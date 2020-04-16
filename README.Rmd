@@ -20,6 +20,8 @@ The `Welcome.R` script in the [NIsim](https://github.com/simonvandekar/NIsim) pa
 ## Setup simulations
 
 ```{r simconfig}
+devtools::install_github('simonvandekar/pbj', ref='ftest')
+devtools::install_github('simonvandekar/NIsim')
 ### LIBRARIES ###
 library(RNifti)
 library(parallel)
@@ -54,7 +56,7 @@ dat$files = file.path(dbimagedir, dat$imgname)
 ### COMPUTING PARAMETERS ###
 computeConfig = list(
   # number of cores to use for computing
-  ncores = 12
+  ncores = 32
 )
 
 
@@ -120,10 +122,11 @@ if(class(simConfig$formres)=='formula' | is.character(simConfig$formres)){
 simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$simdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
 ```
 
-```{r runSims, message=FALSE, eval=FALSE}
+```{r runSims, message=FALSE, eval=TRUE}
 # simfunc should contain a data argument, which is defined within runSim
 # Other arguments are identical across simulation runs.
 simFunc = function(lmfull, lmred, mask, data, nboot){
+  data$fake_group = factor(ceiling(ppoints(nrow(data))*3 ) )
   data$fake_covariate1 = rnorm(nrow(data))
   data$fake_covariate2 = rnorm(nrow(data))
   statmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't')
@@ -145,7 +148,7 @@ results = runSim(simdirs$simdir, method='synthetic',
 simfuncArgs = list(
   lmfull= simConfig$form,
   lmred = simConfig$formred,
-  mask = simConfig$mask), ncores = computeConfig$ncores)
+  mask = simConfig$mask, nboot=simConfig$nboot), ncores = computeConfig$ncores)
 
 dir.create(dirname(simConfig$output), showWarnings = FALSE, recursive = TRUE)
 # clean up files
