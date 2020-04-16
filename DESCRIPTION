@@ -11,8 +11,10 @@ Collate:
   'genSimData.R'
   'master.R'
 Imports:
-  pbmcapply,
   parallel,
+  pbapply,
+  pbj,
+  pbmcapply,
   RNifti
 LazyData: true
 RoxygenNote: 7.1.0

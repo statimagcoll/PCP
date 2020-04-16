@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, eval=FALSE)
+knitr::opts_chunk$set(echo = TRUE, eval=TRUE, message=FALSE, warning=FALSE)
 path = Sys.getenv('PATH')
 path = Sys.setenv('PATH'=paste(path, '/home/rstudio/.local/bin', sep=':'))
 ```
@@ -19,7 +19,7 @@ The `Welcome.R` script in the [NIsim](https://github.com/simonvandekar/NIsim) pa
 
 ## Setup simulations
 
-```{r simconfig, eval=FALSE}
+```{r simconfig}
 ### LIBRARIES ###
 library(RNifti)
 library(parallel)
@@ -33,13 +33,11 @@ library(PDQutils)
 
 
 
-
-
 ### LOAD IN DATA FROM DROPBOX ###
-dbimagedir = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/alff_cropped'
-dbresimagedir = '~/Dropbox/pbj/data/abide/neuroimaging/cpac/alff_resid'
-dbdatafile = '~/Dropbox/pbj/data/abide/demographic/n1035_phenotypic_20190509.rds'
-maskfile = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/cropped_n1035_mask.nii.gz'
+dbimagedir = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/alff'
+dbresimagedir = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/alff_resid'
+dbdatafile = '~/Dropbox (VUMC)/pbj/data/abide/demographic/n1035_phenotypic_20190509.rds'
+maskfile = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/n1035_mask.nii.gz'
 
 
 # load in data and get directories
@@ -55,7 +53,7 @@ dat$files = file.path(dbimagedir, dat$imgname)
 ### COMPUTING PARAMETERS ###
 computeConfig = list(
   # number of cores to use for computing
-  ncores = 20
+  ncores = 12
 )
 
 
@@ -68,16 +66,16 @@ simConfig = list(
   # what transformation to use. Only the first is used
   tranform = c('t', 'edgeworth', 'none'),
   # vector of sample sizes to simulate
-  ns = c(50, 100, 200, 400),
+  ns = c(50, 100, 200, 400, 800),
   # number of simulations to run
   nsim=100,
   # number of bootstraps
-  nboot = 0,
+  nboot = 500,
   # number of permutations
   nperm = 0,
   # cluster forming thresholds
   cfts.s = c(0.1, 0.25, 0.4),
-  cfts.p = c(0.05, 0.01, 0.005, 0.001),
+  cfts.p = c(0.01, 0.001),
   
   # radius for spheres of signal.
   rs=c(8),
@@ -85,15 +83,15 @@ simConfig = list(
   #### MODEL FORMULAS FOR SIMULATIONS ####
   formres = as.formula( paste0(" ~ dx_group + sex + func_mean_fd + ns(age_at_scan, df=10)" )),
   # need age_at_scan in both models for testing nonlinear functions
-  form = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan + scale(age_at_scan^2) + scale(age_at_scan^3)" )),
+  form = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan + fake_covariate1 + fake_covariate2" )),
   formred = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan")),
   #  weights for each subject. Can be a character vector
   W = c("func_mean_fd"),
   # where to output results
-  outdir = '~/spline_nullsim',
+  simdir = '~/temp',
   dat = dat,
   mask = maskfile,
-  output = '~/Dropbox (VUMC)/pbj/pbj_ftest/transform_images.rdata'
+  output = '~/Dropbox (VUMC)/pbj/pbj_ftest/df2_independent_covariates.rdata'
 )
 # use betas = 0 for global null
 # parameters = betas * sd(y)/sd(x).
@@ -119,24 +117,28 @@ if(class(simConfig$formres)=='formula' | is.character(simConfig$formres)){
 
 
 devtools::load_all('./')
-simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$outdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
+simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$simdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
 ```
 
-```{r runSims}
+```{r runSims, message=FALSE, eval=FALSE}
 # simfunc should contain a data argument, which is defined within runSim
 # Other arguments are identical across simulation runs.
-simFunc = function(lmfull, lmred, mask, data){
-  simplify2array(list('t'=lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't')$stat,
-  'edgeworth'=lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'edgeworth')$stat,
-  'none'=lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'none')$stat
-  ) )
+simFunc = function(lmfull, lmred, mask, data, nboot){
+  data$fake_covariate1 = rnorm(nrow(data))
+  data$fake_covariate2 = rnorm(nrow(data))
+  statmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't')
+  k = mmand::shapeKernel(3, 3, type='box')
+  stat = max(c(table(c(mmand::components(stat.statMap(statmap), k))),0), na.rm=TRUE)
+  pbj = pbjSEI(statmap, nboot = nboot)
+  pbj = lapply(pbj[grep('cft', names(pbj))], function(x) x[['boots']])
+  list(obs=stat, boot=pbj)
 }
 
-# simConfig$dat$images = simConfig$dat$files
-# test2 = simFunc(lmfull= simConfig$form,
-#   lmred = simConfig$formred,
-#   mask = simConfig$mask,
-#   data=simConfig$dat[1:50,])
+simConfig$dat$images = simConfig$dat$files
+test2 = simFunc(lmfull= simConfig$form,
+  lmred = simConfig$formred,
+  mask = simConfig$mask,
+  data=simConfig$dat[1:50,], nboot=10) #simConfig$nboot
 
 results = runSim(simdirs$simdir, method='synthetic',
        simfunc = simFunc, mask = simConfig$mask,
@@ -146,27 +148,67 @@ simfuncArgs = list(
   mask = simConfig$mask), ncores = computeConfig$ncores)
 
 dir.create(dirname(simConfig$output), showWarnings = FALSE, recursive = TRUE)
-
 # clean up files
-save.image(file="~/Dropbox/pbj/pbj_ftest/transform_images.rdata")
-Sys.sleep(5*60)
+save.image(file=simConfig$output)
+#Sys.sleep(5*60)
 unlink(list.files(tempdir(), full.names = TRUE))
 gc()
+unlink(simdirs)
 system('sudo shutdown -h now')
 
 # summarize the results
 # apply(rowMeans(simplify2array(x[!is.na(x)]), dims = 2), 2, quantile)
 ```
 
+```{r, message=FALSE, eval=FALSE}
+
+resultsFixedX = runSim(rep(simdirs$simdir[seq(1, nrow(simdirs), by=simConfig$nsim)], each=simConfig$nsim), method='synthetic',
+       simfunc = simFunc, mask = simConfig$mask,
+simfuncArgs = list(
+  lmfull= simConfig$form,
+  lmred = simConfig$formred,
+  mask = simConfig$mask), ncores = computeConfig$ncores)
+
+```
+
+
+
 ```{r, eval=FALSE}
 load('~/Dropbox (VUMC)/pbj/pbj_ftest/synthsim_transform_images.rdata')
+simdirs$results = resultsFixedX# lapply(results, simplify2array)
+x =simdirs[simdirs$n==100,]
+simdirs$results[ !sapply(simdirs$results, is.numeric) ] = NA
+#simdirs$results = lapply(simdirs$results, function(x){ x[,'edgeworth'] = ifelse(is.infinite(x[,'edgeworth']), x[, 't'], x[,'edgeworth']); x})
+by(simdirs, simdirs$n, function(x) sum(!is.na(x$results)))
+by(simdirs, simdirs$n, function(x) apply(rowMeans(simplify2array(x$results[!is.na(x$results)]), dims = 2), 2, function(x) quantile(x)))
+by(simdirs, simdirs$n, function(x) apply(apply(simplify2array(x$results[!is.na(x$results)]), 1:2, var ), 2, function(x) quantile(x)) )
+by(simdirs, simdirs$n, function(x) apply(apply(simplify2array(x$results[!is.na(x$results)]), 1:2, function(y) var(y) ), 2, function(x) x) )
+by(simdirs, simdirs$n, function(x) apply(apply(simplify2array(x$results[!is.na(x$results)]), 1:2, function(y) sd(y)/sqrt(length(y)) ), 2, function(x) x) )
+```
+
+```{r, eval=FALSE}
+simConfig$dat$images = simConfig$dat$files
+test2 = simFuncCoefs(lmfull= simConfig$form,
+ lmred = simConfig$formred,
+ mask = simConfig$mask,
+ data=simConfig$dat[1:50,])
+
+results = runSim(simdirs$simdir, method='synthetic',
+       simfunc = simFuncCoefs, mask = simConfig$mask,
+simfuncArgs = list(
+  lmfull= simConfig$form,
+  lmred = simConfig$formred,
+  mask = simConfig$mask), ncores = computeConfig$ncores)
+
+```
+
+
+```{r, eval=FALSE}
+#load('~/Dropbox (VUMC)/pbj/pbj_ftest/synthsim_transform_images.rdata')
 simdirs$results = results# lapply(results, simplify2array)
 x =simdirs[simdirs$n==100,]
 simdirs$results[ !sapply(simdirs$results, is.numeric) ] = NA
 by(simdirs, simdirs$n, function(x) sum(!is.na(x$results)))
-by(simdirs, simdirs$n, function(x) apply(rowMeans(simplify2array(x$results[!is.na(x$results)]), dims = 2), 2, quantile))
-by(simdirs, simdirs$n, function(x) apply(apply(simplify2array(x$results[!is.na(x$results)]), 1:2, var ), 2, quantile, na.rm=TRUE) )
-by(simdirs, simdirs$n, function(x) apply(apply(simplify2array(x$results[!is.na(x$results)]), 1:2, function(y) var(y)/mean(y) ), 2, quantile, na.rm=TRUE) )
-by(simdirs, simdirs$n, function(x) apply(apply(simplify2array(x$results[!is.na(x$results)]), 1:2, function(y) sd(y)/sqrt(length(y)) ), 2, mean) )
+by(simdirs, simdirs$n, function(x) apply(simplify2array(x$results[!is.na(x$results)]), 1:2, function(x) sd(x)/sqrt(length(x))))
+by(simdirs, simdirs$n, function(x) apply(simplify2array(x$results[!is.na(x$results)]), 1:2, function(x) mean(x)))
 ```
-

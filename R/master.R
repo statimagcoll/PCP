@@ -10,6 +10,7 @@
 #' @param mask If performing simulations under an alternative, signal can be added to the images within the mask.
 #' @param rs vector of radii for signal spheres.
 #' @param betas vector of parameters for signal spheres. Signal is constant throughout the sphere.
+#' @param ncores number of cores for parallel commands.
 #' @return Returns a data frame of directories where simulation setup files are stored. The rds file in each directory saves the data frame and the image locations in the variable "images".
 #' @importFrom RNifti readNifti writeNifti
 #' @importFrom pbmcapply pbmclapply
@@ -90,10 +91,12 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
   #' @return Returns the parameter image after writing it to file.path(outdir, 'signal.nii.gz').
   #' @importFrom RNifti readNifti writeNifti
   #' @importFrom pbmcapply pbmclapply
+  #' @importFrom pbapply pblapply
   #' @importFrom pbj addSignal
   #' @export
   runSim = function(simdirs, simfunc, simfuncArgs=NULL, mask=NULL, method=c('bootstrap', 'synthetic'), ncores=parallel::detectCores(), ...){
-    result = pbmcapply::pbmclapply(simdirs, function(simdir, simfunc, method, mask){
+    result = if(ncores>1){
+      pbmcapply::pbmclapply(simdirs, function(simdir, simfunc, method, mask){
       # load data
       dat = readRDS(file.path(simdir, 'data.rds'))
 
@@ -112,6 +115,27 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
       unlink(dat$images)
       return(result)
     }, simfunc = simfunc, method = method, mask=mask, mc.cores = ncores, ...)
+    } else {
+      pbapply::pblapply(simdirs, function(simdir, simfunc, method, mask){
+        # load data
+        dat = readRDS(file.path(simdir, 'data.rds'))
+
+        # load effect size file if it exists
+        sigfile = file.path(dirname(simdir), 'signal.nii.gz')
+        sigfile = if(file.exists(sigfile)) sigfile else NULL
+        # create names for temporary files
+        dat$tmpfiles = tempfile(paste0(basename(dirname(simdir)), '/s', 1:nrow(dat)), fileext='.nii.gz')
+        dir.create(dirname(dat$tmpfiles[1]), recursive=TRUE, showWarnings = FALSE)
+        genSimData(files=dat$images, outfiles=dat$tmpfiles, betaimg=sigfile, mask=mask, method=method)
+        # adds artificial signal to images
+        dat$images = dat$tmpfiles
+
+        simfuncArgs$data = dat
+        result = do.call(simfunc, args = simfuncArgs)
+        unlink(dat$images)
+        return(result)
+      }, simfunc = simfunc, method = method, mask=mask )
+    }
     return(result)
   }
 

@@ -32,6 +32,8 @@ simSetup(
 \item{rs}{vector of radii for signal spheres.}
 
 \item{betas}{vector of parameters for signal spheres. Signal is constant throughout the sphere.}
+
+\item{ncores}{number of cores for parallel commands.}
 }
 \value{
 Returns a data frame of directories where simulation setup files are stored. The rds file in each directory saves the data frame and the image locations in the variable "images".
