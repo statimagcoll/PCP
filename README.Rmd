@@ -30,6 +30,7 @@ library(progress)
 library(abind)
 library(pbj)
 library(PDQutils)
+library(NIsim)
 
 
 
@@ -116,7 +117,6 @@ if(class(simConfig$formres)=='formula' | is.character(simConfig$formres)){
 }
 
 
-devtools::load_all('./')
 simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$simdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
 ```
 
