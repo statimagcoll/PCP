@@ -45,9 +45,6 @@ maskfile = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/n1035_mask.nii.gz'
 
 # load in data and get directories
 dat = readRDS(dbdatafile)
-# fake covariates for later use if needed
-dat$fake_covariate = rnorm(nrow(dat))
-dat$fake_group = factor(sample(1:4, nrow(dat), replace=TRUE))
 dat$imgname = paste(dat$file_id, 'alff.nii.gz', sep='_')
 dat$files = file.path(dbimagedir, dat$imgname)
 
@@ -86,7 +83,7 @@ simConfig = list(
   #### MODEL FORMULAS FOR SIMULATIONS ####
   formres = as.formula( paste0(" ~ dx_group + sex + func_mean_fd + ns(age_at_scan, df=10)" )),
   # need age_at_scan in both models for testing nonlinear functions
-  form = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan + fake_covariate1 + fake_covariate2" )),
+  form = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan + fake_group" )),
   formred = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan")),
   #  weights for each subject. Can be a character vector
   W = c("func_mean_fd"),
@@ -94,7 +91,7 @@ simConfig = list(
   simdir = '~/temp',
   dat = dat,
   mask = maskfile,
-  output = '~/Dropbox (VUMC)/pbj/pbj_ftest/df2_independent_covariates.rdata'
+  output = '~/Dropbox (VUMC)/pbj/pbj_ftest/df2_group_covariate.rdata'
 )
 # use betas = 0 for global null
 # parameters = betas * sd(y)/sd(x).
@@ -125,35 +122,29 @@ simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$sim
 ```{r runSims, message=FALSE, eval=TRUE}
 # simfunc should contain a data argument, which is defined within runSim
 # Other arguments are identical across simulation runs.
-simFunc = function(lmfull, lmred, mask, data, nboot){
+simFunc = function(lmfull, lmred, mask, data, nboot, cfts){
   data$fake_group = factor(ceiling(ppoints(nrow(data))*3 ) )
   data$fake_covariate1 = rnorm(nrow(data))
   data$fake_covariate2 = rnorm(nrow(data))
   statmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't')
   k = mmand::shapeKernel(3, 3, type='box')
-  stat = max(c(table(c(mmand::components(stat.statMap(statmap), k))),0), na.rm=TRUE)
-  pbj = pbjSEI(statmap, nboot = nboot)
+  stat = lapply(cfts, function(th) max(c(table(c(mmand::components(stat.statMap(statmap) >th^2*statmap$rdf + statmap$df, k))),0), na.rm=TRUE) )
+  pbj = pbjSEI(statmap, nboot = nboot, cfts.s = cfts)
   pbj = lapply(pbj[grep('cft', names(pbj))], function(x) x[['boots']])
   list(obs=stat, boot=pbj)
 }
-
-simConfig$dat$images = simConfig$dat$files
-test2 = simFunc(lmfull= simConfig$form,
-  lmred = simConfig$formred,
-  mask = simConfig$mask,
-  data=simConfig$dat[1:50,], nboot=10) #simConfig$nboot
 
 results = runSim(simdirs$simdir, method='synthetic',
        simfunc = simFunc, mask = simConfig$mask,
 simfuncArgs = list(
   lmfull= simConfig$form,
   lmred = simConfig$formred,
-  mask = simConfig$mask, nboot=simConfig$nboot), ncores = computeConfig$ncores)
+  mask = simConfig$mask, nboot=simConfig$nboot, cfts=simConfig$cfts.s), ncores = computeConfig$ncores)
 
 dir.create(dirname(simConfig$output), showWarnings = FALSE, recursive = TRUE)
 # clean up files
 save.image(file=simConfig$output)
-#Sys.sleep(5*60)
+Sys.sleep(5*60)
 unlink(list.files(tempdir(), full.names = TRUE))
 gc()
 unlink(simdirs)
