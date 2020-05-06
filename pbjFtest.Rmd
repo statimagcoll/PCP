@@ -38,7 +38,7 @@ library(NIsim)
 
 
 ### LOAD IN DATA FROM DROPBOX ###
-dbimagedir = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/alff_cropped'
+dbimagedir = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/alff'
 dbresimagedir = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/alff_res'
 dbdatafile = '~/Dropbox (VUMC)/pbj/data/abide/demographic/n1035_phenotypic_20190509.rds'
 maskfile = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/n1035_mask.nii.gz'
@@ -83,7 +83,7 @@ fakePolySimConfig = list(
   dat = dat,
   mask = maskfile,
   output = '~/Dropbox (VUMC)/pbj/pbj_ftest/df2_polynomial.rdata',
-  ncores = 32
+  ncores = 16
 )
 # use betas = 0 for global null
 # parameters = betas * sd(y)/sd(x).
@@ -249,6 +249,8 @@ unlink(list.files(tempdir(), full.names = TRUE))
 gc()
 unlink(simdirs)
 }
+# shuts down aws machine
+system('sudo shutdown -h now')
 ```
 
 
