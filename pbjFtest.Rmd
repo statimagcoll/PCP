@@ -55,9 +55,9 @@ dat$files = file.path(dbimagedir, dat$imgname)
 ### SIMULATION PARAMETERS ###
 fakePolySimConfig = list(
   # vector of sample sizes to simulate
-  ns = c(50, 100, 200, 400),
+  ns = c(50, 100),
   # number of simulations to run
-  nsim=5,
+  nsim=1000,
   # number of bootstraps
   nboot = 500,
   # number of permutations
@@ -83,11 +83,11 @@ fakePolySimConfig = list(
   dat = dat,
   mask = maskfile,
   output = '~/Dropbox (VUMC)/pbj/pbj_ftest/df2_polynomial.rdata',
-  ncores = 16
+  ncores = 64
 )
 # use betas = 0 for global null
 # parameters = betas * sd(y)/sd(x).
-fakePolySimConfig$betas = rep(0, length(simConfig$rs))
+fakePolySimConfig$betas = rep(0, length(fakePolySimConfig$rs))
 
 ### OTHER SIMULATION SETUPS ###
 # 1 DF is real group
@@ -106,13 +106,13 @@ fakeGroupSimConfig$output = '~/Dropbox (VUMC)/pbj/pbj_ftest/df3_fakegroup.rdata'
 
 # 4 DOF motion
 motionSplineSimConfig = fakePolySimConfig
-motionSplineSimConfig$form = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan + ns(func_mean_fd, df=4)" ))
-motionSplineSimConfig$formred = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan + func_mean_fd" ))
+motionSplineSimConfig$form = as.formula(paste0(" ~ sex + age_at_scan + ns(func_mean_fd, df=5)" ))
+motionSplineSimConfig$formred = as.formula(paste0(" ~ sex + age_at_scan + func_mean_fd" ))
 motionSplineSimConfig$output = '~/Dropbox (VUMC)/pbj/pbj_ftest/df4_motionspline.rdata'
 
 # 5 DOF
 ageSplineSimConfig = fakePolySimConfig
-ageSplineSimConfig$form = as.formula(paste0(" ~ sex + func_mean_fd + ns(age_at_scan, df=5)" ))
+ageSplineSimConfig$form = as.formula(paste0(" ~ sex + func_mean_fd + ns(age_at_scan, df=6)" ))
 ageSplineSimConfig$formred = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan" ))
 motionSplineSimConfig$output = '~/Dropbox (VUMC)/pbj/pbj_ftest/df5_agespline.rdata'
 ```
@@ -139,29 +139,29 @@ simFunc = function(lmfull, lmred, mask, data, nboot, cfts){
   # generate fake covariates
   data$fake_group = factor(ceiling(ppoints(nrow(data))*4 ) )
   data$fake_covariate1 = rnorm(nrow(data))
-
+  
   # compute Statistical maps
   # Residuals from null model to use for permutation procedures
   nullResids = lmPBJ(data$images, form=lmred, formred=~ 1, mask=mask, data=data, transform = 'none', robust=FALSE )$sqrtSigma
   nullResids = scale(t(nullResids), center=FALSE, scale=TRUE)
-
+  
   # t transform, robust, estimate covariance
   tRobustStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't' )
   # t transform, classical, estimate covariance
   tStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't', robust=FALSE)
   # no transform, robust, estimate covariance
-  robustStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform ='none')
+  #robustStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform ='none')
   # no transform, classical, estimate covariance
-  plainStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'none', robust=FALSE)
+  plainstatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'none', robust=FALSE)
   resids = plainStatmap$sqrtSigma
-
+  
   statmaps = grep('Statmap', ls(), value=TRUE)
   out = list()
   # doesn't matter which statmap we use here
   thrs = (cfts^2*plainStatmap$rdf) + plainStatmap$df
   # Apply each of the sampling methods
   for(statmapname in statmaps){
-
+    
     ### BOOTSTRAP METHODS
     statmap = get(statmapname)
     # normal bootstrap
@@ -176,7 +176,7 @@ simFunc = function(lmfull, lmred, mask, data, nboot, cfts){
     #pbjNormT = getBoots(pbjSEI(statmap, nboot = nboot, cfts.s = cfts, tboot=TRUE))
     # Rademacher t
     #pbjRadT = getBoots(pbjSEI(statmap, nboot = nboot, cfts.s = cfts, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1}, tboot=TRUE))
-
+    
     ### PERMUTATION METHODS
     # Q needs to absolute value of Q for permutation procedure. This multiplies by the sign of the residuals to do that.
     permMap = statmap
@@ -188,20 +188,20 @@ simFunc = function(lmfull, lmred, mask, data, nboot, cfts){
     }
     pbjPerm = pbjInference(permMap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = perm)
     pbjPermT = pbjInference(permMap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = perm, tboot=TRUE)
-
+    
     # exchangeable permutation
-    nullResids = sign(nullResids)
+    nullResids = scale(sign(nullResids), center=FALSE, scale=TRUE)
     exchPerm = function(n){
       nullResids[sample(1:n),]
     }
     pbjPermExch = pbjInference(permMap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = exchPerm)
     pbjPermExchT = pbjInference(permMap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = exchPerm, tboot=TRUE)
-
+    
     # collect output
     PBJnames = grep('^pbj', ls(), value=TRUE)
     allnames = paste(statmapname, PBJnames, sep='_')
     out[allnames] = lapply(PBJnames, get, pos = environment())
-
+    
     ### REPEAT ALL WITH INDEPENDENCE SPATIAL COVARIANCE ASSUMPTION
     # nonrobust methods won't be different, because covariance is same for all statistics.
   }
@@ -235,87 +235,101 @@ for(sim in sims[1]){
   
   simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$simdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
   
+  
+  #time = system.time(test <- simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS(file.path(simdirs$simdir[10], 'data.rds')), simConfig$nboot, simConfig$cfts.s) )
+  
+  # mix this up so that large sample simulations aren't all dropped on one "thread".
+  simdirs = simdirs[sample(1:nrow(simdirs)),]
   results = runSim(simdirs$simdir, method='synthetic',
-       simfunc = simFunc, mask = simConfig$mask,
-simfuncArgs = list(
-  lmfull= simConfig$form,
-  lmred = simConfig$formred,
-  mask = simConfig$mask, nboot=simConfig$nboot, cfts=simConfig$cfts.s), ncores = computeConfig$ncores)
-
-dir.create(dirname(simConfig$output), showWarnings = FALSE, recursive = TRUE)
-# clean up files
-save.image(file=simConfig$output)
-unlink(list.files(tempdir(), full.names = TRUE))
-gc()
-unlink(simdirs)
+                   simfunc = simFunc, mask = simConfig$mask,
+                   simfuncArgs = list(
+                     lmfull= simConfig$form,
+                     lmred = simConfig$formred,
+                     mask = simConfig$mask, nboot=simConfig$nboot, cfts=simConfig$cfts.s), ncores = simConfig$ncores)
+  
+  dir.create(dirname(simConfig$output), showWarnings = FALSE, recursive = TRUE)
+  # clean up files
+  save.image(file=simConfig$output)
+  unlink(list.files(tempdir(), full.names = TRUE))
+  gc()
+  unlink(simdirs)
 }
 # shuts down aws machine
+Sys.sleep(60*5)
 system('sudo shutdown -h now')
 ```
 
 
 # plotting results
 ```{r, eval=TRUE}
+# for each method plot:
+# qqplot of maximum value for each sample size
+# qqplot of max cluster size for each cft and sample size
 # plotting function for below sections
 plots = function(rdata){
   load(rdata)
-simdirs$results = results# lapply(results, simplify2array)
-x =simdirs[simdirs$n==100,]
-simdirs[, paste0('obsMaxClust_cft.s', simConfig$cfts.s)] = do.call(rbind, by(simdirs, simdirs$n, function(x) do.call(rbind, lapply(x$results, function(y) unlist(y[['obs']]) ) ) ))
-
-cex=1.5
-par(mgp=c(1.7,.7,0), lwd=1.5, lend=2, cex.lab=0.8*cex, cex.axis=0.8*cex, cex.main=1*cex, mfrow=c(1,1), mar=c(2.8,2.8,1.8,.2), bty='l')
-layout(mat=matrix(1:(length(simConfig$cfts.s)*length(simConfig$ns)), nrow=length(simConfig$cfts.s)) )
-# axes are based on tail quantiles
-probs = seq(0.75, 1, length.out=100) #length.out=pmin(simConfig$nsim, simConfig$nboot)
-
-trash = by(simdirs, simdirs$n, function(df){
-  for(cftInd in 1:length(simConfig$cfts.s)){
-    ylims = range(sapply(df$results, function(x) range(quantile(x$boot[[cftInd]][[1]], probs=probs))))
-    colname = paste0('obsMaxClust_cft.s', simConfig$cfts.s[cftInd])
-    x = df[,colname]
-    xlims = range(quantile(x, probs=probs) )
-    xaxlab = c(0.9, 0.95, 0.99, 0.999) 
-    xaxt = quantile(x, probs=xaxlab)
-    plot(x, ylim=ylims, xlim=xlims, type='n', xlab='Observed cluster quantile', ylab='Estimated cluster quantile', main=paste('n =', df$n[1], 'cft =', simConfig$cfts.s[cftInd]))
-    #axis(side=1, at=xaxt, labels=xaxlab)
-    abline(v=xaxt, col='orange', lty=2)
-    for(ind in 1:simConfig$nsim){
-      points(quantile(x, probs=probs), quantile(df$results[[ind]]$boot[[cftInd]][[1]], probs=probs), type='l')
+  simdirs$results = results# lapply(results, simplify2array)
+  methods = names(simdirs$results[[1]])
+  stats = c("Max", paste('cft =', simConfig$cfts.s) )
+  
+  # graphical parameters
+  cex=1.5
+  par(mgp=c(1.7,.7,0), lwd=1.5, lend=2, cex.lab=0.8*cex, cex.axis=0.8*cex, cex.main=1*cex, mfrow=c(1,1), mar=c(2.8,2.8,1.8,.2), bty='l', oma=c(0,0,2,0))
+  layout(mat=matrix(1:(length(stats)*length(simConfig$ns)), nrow=length(stats)) )
+  # axes are based on tail quantiles
+  probs = seq(0.75, 1, length.out=100)
+  
+  x =simdirs[simdirs$n==100,]
+  for(method in methods){
+  obsStat = do.call(rbind, lapply(simdirs$results, function(y) sapply(y[[method]][['obsStat']],function(z) {suppressWarnings(res <- max(z)); res[is.infinite(res)] = 0; res} ) ) )
+  # These colnames were sample size dependent
+  simdirs[, stats] = obsStat
+  
+  simdirs$boots = lapply(simdirs$results, function(y) do.call(rbind, lapply(y[[method]][['boots']], function(z0) sapply(z0, function(z) {suppressWarnings(res <- max(z)); res[is.infinite(res)] = 0; res} ) ) ) )
+ #length.out=pmin(simConfig$nsim, simConfig$nboot)
+  
+  trash = by(simdirs, simdirs$n, function(df){
+    for(cftInd in 1:length(stats)){
+      ylims = range(sapply(df$boots, function(x) range(quantile(x[,cftInd], probs=probs) ) ) )
+      colname = stats[cftInd]
+      x = df[,colname ]
+      xlims = range(quantile(x, probs=probs) )
+      xaxlab = c(0.9, 0.95, 0.99, 0.999) 
+      xaxt = quantile(x, probs=xaxlab)
+      plot(x, ylim=ylims, xlim=xlims, type='n', xlab='Observed quantile', ylab='Estimated quantile', main=paste('n =', df$n[1],  colname))
+      #axis(side=1, at=xaxt, labels=xaxlab)
+      abline(v=xaxt, col='orange', lty=2)
+      for(ind in 1:simConfig$nsim){
+        points(quantile(x, probs=probs), quantile(df$boots[[ind]][,cftInd], probs=probs), type='l')
+      }
+      abline(a=0,b=1, col='blue')
     }
-    abline(a=0,b=1, col='blue')
+  })
+      mtext(method, outer=TRUE)
+  
+  trash = by(simdirs, simdirs$n, function(df){
+    for(cftInd in 1:length(stats)){
+      ylims = range(sapply(df$boots, function(x) range(quantile(x[,cftInd], probs=probs))))
+      x = df[,stats[cftInd] ]
+      xlims = range(quantile(x, probs=probs) )
+      xaxlab = c(0.9, 0.95, 0.99, 0.999) 
+      xaxt = quantile(x, probs=xaxlab)
+      y=colMeans(do.call(rbind, lapply(1:nrow(df), function(ind) quantile(df$boots[[ind]][,cftInd], probs=xaxlab)<df[ind,stats[cftInd] ]) ) )
+      plot(1-xaxlab, y, type='b', xlab='Target type 1 error', ylab='Actual type 1 error', xlim=range(c(y, 1-xaxlab)), ylim=range(c(y, 1-xaxlab)), main=paste('n =', df$n[1],  stats[cftInd]) )
+      abline(a=0,b=1, col='blue')
+    }
+  })
+   mtext(method, outer=TRUE)
   }
-})
-
-trash = by(simdirs, simdirs$n, function(df){
-  for(cftInd in 1:length(simConfig$cfts.s)){
-    ylims = range(sapply(df$results, function(x) range(quantile(x$boot[[cftInd]][[1]], probs=probs))))
-    colname = paste0('obsMaxClust_cft.s', simConfig$cfts.s[cftInd])
-    x = df[,colname]
-    xlims = range(quantile(x, probs=probs) )
-    xaxlab = c(0.9, 0.95, 0.99, 0.999) 
-    xaxt = quantile(x, probs=xaxlab)
-    y=colMeans(do.call(rbind, lapply(1:nrow(df), function(ind) quantile(df$results[[ind]]$boot[[cftInd]][[1]], probs=xaxlab)<df[ind,colname])) )
-    plot(1-xaxlab, y, type='b', xlab='Target type 1 error', ylab='Actual type 1 error', xlim=range(c(y, 1-xaxlab)), ylim=range(c(y, 1-xaxlab)), , main=paste('n =', df$n[1], 'cft =', simConfig$cfts.s[cftInd]))
-    abline(a=0,b=1, col='blue')
-  }
-})
 }
 ```
 
 ## Group covariate
 
-```{r, eval=TRUE}
-plots('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_group_covariate.rdata')
-```
 
 
 
 ## Independent continuous covariates
-
-```{r, eval=TRUE}
-plots('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_independent_covariates.rdata')
-```
 
 
 ## Polynomial continuous covariate
@@ -323,5 +337,5 @@ plots('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_independent_covariates.rdata')
 Testing the second and third degree terms of a polynomial covariate.
 
 ```{r, eval=TRUE}
-plots('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_polynomial_covariate.rdata')
+plots('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_polynomial.rdata')
 ```
