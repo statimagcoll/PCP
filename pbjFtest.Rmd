@@ -153,12 +153,12 @@ simFunc = function(lmfull, lmred, mask, data, nboot, cfts){
   #robustStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform ='none')
   # no transform, classical, estimate covariance
   plainstatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'none', robust=FALSE)
-  resids = plainStatmap$sqrtSigma
+  resids = plainstatmap$sqrtSigma
   
   statmaps = grep('Statmap', ls(), value=TRUE)
   out = list()
   # doesn't matter which statmap we use here
-  thrs = (cfts^2*plainStatmap$rdf) + plainStatmap$df
+  thrs = (cfts^2*plainstatmap$rdf) + plainStatmap$df
   # Apply each of the sampling methods
   for(statmapname in statmaps){
     
@@ -226,7 +226,7 @@ for(sim in sims[1]){
     simConfig$dat$rfiles = file.path(simConfig$resdir, basename(simConfig$dat$files))
     if(!all(file.exists(simConfig$dat$rfiles))){
       pbj::residualizeImages(files=simConfig$dat$files, dat=simConfig$dat, mask=simConfig$mask, form=simConfig$formres,
-                             outfiles=simConfig$dat$rfiles, mc.cores=computeConfig$ncores)
+                             outfiles=simConfig$dat$rfiles, mc.cores=simConfig$ncores)
     }
     simConfig$dat$files = simConfig$dat$rfiles
     # clean up. May not be necessary
