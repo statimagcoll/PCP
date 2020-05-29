@@ -20,8 +20,8 @@ The `Welcome.R` script in the [NIsim](https://github.com/simonvandekar/NIsim) pa
 ## Setup simulations
 
 ```{r simconfig}
-devtools::install_github('simonvandekar/pbj', ref='ftest')
-devtools::install_github('simonvandekar/NIsim')
+#devtools::install_github('simonvandekar/pbj', ref='ftest')
+#devtools::install_github('simonvandekar/NIsim')
 ### LIBRARIES ###
 library(RNifti)
 library(parallel)
@@ -140,7 +140,7 @@ simFunc = function(lmfull, lmred, mask, data, nboot, cfts){
 #test = simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS(file.path(simdirs$simdir[101], 'data.rds')), simConfig$nboot, simConfig$cfts.s)
 
 
-results = runSim(simdirs$simdir[1], method='synthetic',
+results = runSim(simdirs$simdir, method='synthetic',
        simfunc = simFunc, mask = simConfig$mask,
 simfuncArgs = list(
   lmfull= simConfig$form,
@@ -150,11 +150,11 @@ simfuncArgs = list(
 dir.create(dirname(simConfig$output), showWarnings = FALSE, recursive = TRUE)
 # clean up files
 save.image(file=simConfig$output)
-Sys.sleep(5*60)
-unlink(list.files(tempdir(), full.names = TRUE))
-gc()
-unlink(simdirs)
-system('sudo shutdown -h now')
+#Sys.sleep(5*60)
+#unlink(list.files(tempdir(), full.names = TRUE))
+#gc()
+#unlink(simdirs)
+#system('sudo shutdown -h now')
 
 # summarize the results
 # apply(rowMeans(simplify2array(x[!is.na(x)]), dims = 2), 2, quantile)
@@ -171,6 +171,16 @@ simfuncArgs = list(
 
 ```
 
+
+
+## Compare covariance estimator to simulations estimator
+
+```{r, eval=FALSE}
+colMeans(do.call(rbind, lapply(results, function(x) c(crossprod(x$covestimator[1,,], x$covestimator[2,,])))))
+
+cov(do.call(rbind, lapply(results, function(x) c(x$estimates))))
+
+```
 
 
 ```{r, eval=FALSE}

@@ -40,8 +40,11 @@ library(NIsim)
 ### LOAD IN DATA FROM DROPBOX ###
 dbimagedir = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/alff'
 dbresimagedir = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/alff_res'
-dbdatafile = '~/Dropbox (VUMC)/pbj/data/abide/demographic/n1035_phenotypic_20190509.rds'
 maskfile = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/n1035_mask.nii.gz'
+#dbimagedir = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/alff_cropped/'
+#dbresimagedir = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/alff_cropped_res/'
+#maskfile = '~/Dropbox (VUMC)/pbj/data/abide/neuroimaging/cpac/cropped_n1035_mask.nii.gz'
+dbdatafile = '~/Dropbox (VUMC)/pbj/data/abide/demographic/n1035_phenotypic_20190509.rds'
 
 
 # load in data and get directories
@@ -59,7 +62,7 @@ fakePolySimConfig = list(
   # number of simulations to run
   nsim=1000,
   # number of bootstraps
-  nboot = 500,
+  nboot = 10,
   # number of permutations
   nperm = 500,
   # cluster forming thresholds
@@ -139,69 +142,70 @@ simFunc = function(lmfull, lmred, mask, data, nboot, cfts){
   # generate fake covariates
   data$fake_group = factor(ceiling(ppoints(nrow(data))*4 ) )
   data$fake_covariate1 = rnorm(nrow(data))
-  
+
   # compute Statistical maps
   # Residuals from null model to use for permutation procedures
   nullResids = lmPBJ(data$images, form=lmred, formred=~ 1, mask=mask, data=data, transform = 'none', robust=FALSE )$sqrtSigma
-  nullResids = scale(t(nullResids), center=FALSE, scale=TRUE)
-  
+  perm = function(n){
+    nullResids[sample(1:n),]
+  }
+  signedResids = sign(nullResids)
+  exchPerm = function(n){
+    signedResids[sample(1:n),]
+  }
+
   # t transform, robust, estimate covariance
   tRobustStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't' )
   # t transform, classical, estimate covariance
   tStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't', robust=FALSE)
+  # Doesn't scale residuals by hat matrix diagonal
+  tPermStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't', HC3=FALSE )
   # no transform, robust, estimate covariance
   #robustStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform ='none')
   # no transform, classical, estimate covariance
   plainstatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'none', robust=FALSE)
   resids = plainstatmap$sqrtSigma
-  
-  statmaps = grep('Statmap', ls(), value=TRUE)
+
+  statmaps = c('tRobustStatmap', 'tStatmap', 'tPermStatmap')
   out = list()
   # doesn't matter which statmap we use here
-  thrs = (cfts^2*plainstatmap$rdf) + plainStatmap$df
+  thrs = (cfts^2*plainstatmap$rdf) + plainstatmap$df
   # Apply each of the sampling methods
   for(statmapname in statmaps){
-    
+
     ### BOOTSTRAP METHODS
     statmap = get(statmapname)
     # normal bootstrap
     #pbjNorm = getBoots(pbjSEI(statmap, nboot = nboot, cfts.s = cfts))
-    pbjNorm = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats)
-    pbjNormT = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, tboot=TRUE)
-    # Rademacher bootstrap
-    pbjRad = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1})
-    pbjRadT = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1}, tboot=TRUE)
-    #pbjRad = getBoots(pbjSEI(statmap, nboot = nboot, cfts.s = cfts, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1}))
-    # t bootstrap
-    #pbjNormT = getBoots(pbjSEI(statmap, nboot = nboot, cfts.s = cfts, tboot=TRUE))
-    # Rademacher t
-    #pbjRadT = getBoots(pbjSEI(statmap, nboot = nboot, cfts.s = cfts, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1}, tboot=TRUE))
-    
-    ### PERMUTATION METHODS
-    # Q needs to absolute value of Q for permutation procedure. This multiplies by the sign of the residuals to do that.
-    permMap = statmap
-    # check dimensions
-    permMap$sqrtSigma = sweep(permMap$sqrtSigma, MARGIN = c(1,2), STATS = sign(resids), FUN="*")
-    # permutation # need to get null residuals from lmPBJ for this one
-    perm = function(n){
-      nullResids[sample(1:n),]
+    if(statmapname %in% c('tRobustStatmap', 'tStatmap')){
+      pbjNormT = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, method='t')
+      # Rademacher bootstrap
+      pbjRadT = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1}, method='t')
     }
-    pbjPerm = pbjInference(permMap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = perm)
-    pbjPermT = pbjInference(permMap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = perm, tboot=TRUE)
-    
-    # exchangeable permutation
-    nullResids = scale(sign(nullResids), center=FALSE, scale=TRUE)
-    exchPerm = function(n){
-      nullResids[sample(1:n),]
+    if(statmapname=='tRobustStatmap'){
+      pbjRadRobust = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1}, method='robust')
+      pbjNormRobust = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, method='robust')
+      # exchangeable permutation
+      # scale out sign of Q from sqrtSigma -- sign comes from "permExch" function
+      statmap$sqrtSigma = sweep(statmap$sqrtSigma, MARGIN = c(1,2), STATS = sign(resids), FUN="*")
+      pbjPermExch = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = exchPerm, method='robust')
     }
-    pbjPermExch = pbjInference(permMap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = exchPerm)
-    pbjPermExchT = pbjInference(permMap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = exchPerm, tboot=TRUE)
-    
+    if(statmapname == 'tStatmap'){
+      pbjNorm = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, method='regular')
+      pbjRad = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1}, method='regular')
+    }
+
+    if(statmapname=='tPermStatmap'){
+      # now scale out residuals from sqrtSigma -- scale comes from "perm" function
+      statmap$sqrtSigma = sweep(statmap$sqrtSigma, MARGIN = c(1,2), STATS = resids, FUN="/")
+      pbjPerm = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = perm, method='robust')
+    }
     # collect output
     PBJnames = grep('^pbj', ls(), value=TRUE)
     allnames = paste(statmapname, PBJnames, sep='_')
     out[allnames] = lapply(PBJnames, get, pos = environment())
-    
+    rm(PBJnames)
+
     ### REPEAT ALL WITH INDEPENDENCE SPATIAL COVARIANCE ASSUMPTION
     # nonrobust methods won't be different, because covariance is same for all statistics.
   }
@@ -209,7 +213,8 @@ simFunc = function(lmfull, lmred, mask, data, nboot, cfts){
 }
 
 #debug(pbjInference)
-#test = simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS(file.path(simdirs$simdir[101], 'data.rds')), simConfig$nboot, simConfig$cfts.s)
+simConfig = get("ageSplineSimConfig")
+test = simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS(file.path(simdirs$simdir[101], 'data.rds')), simConfig$nboot, simConfig$cfts.s)
 ```
 
 # Run simulations
@@ -279,9 +284,8 @@ plots = function(rdata){
   # axes are based on tail quantiles
   probs = seq(0.75, 1, length.out=100)
   
-  x =simdirs[simdirs$n==100,]
   for(method in methods){
-  obsStat = do.call(rbind, lapply(simdirs$results, function(y) sapply(y[[method]][['obsStat']],function(z) {suppressWarnings(res <- max(z)); res[is.infinite(res)] = 0; res} ) ) )
+  obsStat = do.call(rbind, lapply(simdirs$results, function(y) if(is.null(y)) NA else sapply(y[[method]][['obsStat']],function(z) {suppressWarnings(res <- max(z)); res[is.infinite(res)] = 0; res} ) ) )
   # These colnames were sample size dependent
   simdirs[, stats] = obsStat
   
@@ -290,17 +294,17 @@ plots = function(rdata){
   
   trash = by(simdirs, simdirs$n, function(df){
     for(cftInd in 1:length(stats)){
-      ylims = range(sapply(df$boots, function(x) range(quantile(x[,cftInd], probs=probs) ) ) )
+      ylims = range(sapply(df$boots, function(x) range(quantile(x[,cftInd], probs=probs, na.rm=TRUE) ) ), na.rm=TRUE )
       colname = stats[cftInd]
       x = df[,colname ]
-      xlims = range(quantile(x, probs=probs) )
+      xlims = range(quantile(x, probs=probs, na.rm=TRUE) )
       xaxlab = c(0.9, 0.95, 0.99, 0.999) 
-      xaxt = quantile(x, probs=xaxlab)
+      xaxt = quantile(x, probs=xaxlab, na.rm = TRUE)
       plot(x, ylim=ylims, xlim=xlims, type='n', xlab='Observed quantile', ylab='Estimated quantile', main=paste('n =', df$n[1],  colname))
       #axis(side=1, at=xaxt, labels=xaxlab)
       abline(v=xaxt, col='orange', lty=2)
       for(ind in 1:simConfig$nsim){
-        points(quantile(x, probs=probs), quantile(df$boots[[ind]][,cftInd], probs=probs), type='l')
+        if(!is.null(df$boots[[ind]])) points(quantile(x, probs=probs, na.rm=TRUE), quantile(df$boots[[ind]][,cftInd], probs=probs, na.rm=TRUE), type='l')
       }
       abline(a=0,b=1, col='blue')
     }
@@ -309,12 +313,12 @@ plots = function(rdata){
   
   trash = by(simdirs, simdirs$n, function(df){
     for(cftInd in 1:length(stats)){
-      ylims = range(sapply(df$boots, function(x) range(quantile(x[,cftInd], probs=probs))))
+      ylims = range(sapply(df$boots, function(x) range(quantile(x[,cftInd], probs=probs, na.rm = TRUE))), na.rm=TRUE)
       x = df[,stats[cftInd] ]
-      xlims = range(quantile(x, probs=probs) )
+      xlims = range(quantile(x, probs=probs, na.rm=TRUE))
       xaxlab = c(0.9, 0.95, 0.99, 0.999) 
-      xaxt = quantile(x, probs=xaxlab)
-      y=colMeans(do.call(rbind, lapply(1:nrow(df), function(ind) quantile(df$boots[[ind]][,cftInd], probs=xaxlab)<df[ind,stats[cftInd] ]) ) )
+      xaxt = quantile(x, probs=xaxlab, na.rm=TRUE)
+      y=colMeans(do.call(rbind, lapply(1:nrow(df), function(ind) quantile(df$boots[[ind]][,cftInd], probs=xaxlab, na.rm =TRUE)<df[ind,stats[cftInd] ]) ), na.rm=TRUE )
       plot(1-xaxlab, y, type='b', xlab='Target type 1 error', ylab='Actual type 1 error', xlim=range(c(y, 1-xaxlab)), ylim=range(c(y, 1-xaxlab)), main=paste('n =', df$n[1],  stats[cftInd]) )
       abline(a=0,b=1, col='blue')
     }
@@ -337,5 +341,6 @@ plots = function(rdata){
 Testing the second and third degree terms of a polynomial covariate.
 
 ```{r, eval=TRUE}
-plots('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_polynomial.rdata')
+debug(plots)
+plots('~/Dropbox (VUMC)/pbj/pbj_ftest/df5_agespline.rdata')
 ```
