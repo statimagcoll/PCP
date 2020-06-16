@@ -58,13 +58,11 @@ dat$files = file.path(dbimagedir, dat$imgname)
 ### SIMULATION PARAMETERS ###
 fakePolySimConfig = list(
   # vector of sample sizes to simulate
-  ns = c(50, 100),
+  ns = c(50, 100, 200, 400),
   # number of simulations to run
-  nsim=1000,
+  nsim=100,
   # number of bootstraps
-  nboot = 10,
-  # number of permutations
-  nperm = 500,
+  nboot = 500,
   # cluster forming thresholds
   cfts.s = c(0.1, 0.25, 0.4),
   cfts.p = c(0.01, 0.001),
@@ -129,6 +127,7 @@ getBoots = function(pbjObj){
   colnames(out) = cftnames
   ccomps = lapply(pbjObj[ cftnames ], function(x) x$obs)
   return(list(obs=ccomps, boots=out))
+  
 }
 
 # Statistic function to get objects for pbjInference
@@ -213,14 +212,15 @@ simFunc = function(lmfull, lmred, mask, data, nboot, cfts){
 }
 
 #debug(pbjInference)
-simConfig = get("ageSplineSimConfig")
-test = simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS(file.path(simdirs$simdir[101], 'data.rds')), simConfig$nboot, simConfig$cfts.s)
+#simConfig = get("fakePolySimConfig")
+#simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$simdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
+#simtime = system.time(test <- simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS(file.path(simdirs$simdir[400], 'data.rds')), simConfig$nboot, simConfig$cfts.s))
 ```
 
 # Run simulations
 ```{r runSims}
 sims = grep('SimConfig', ls(), value=TRUE)
-for(sim in sims[1]){
+for(sim in sims[3]){
   # get simulation configuration for this simulation
   simConfig = get(sim) 
   ### SETUP THE SIMULATION ANALYSIS ###
