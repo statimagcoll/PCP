@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, eval=TRUE, message=FALSE, warning=FALSE, fig.width=15, fig.height=9)
+knitr::opts_chunk$set(echo = FALSE, eval=FALSE, message=FALSE, warning=FALSE, fig.width=15, fig.height=9)
 path = Sys.getenv('PATH')
 path = Sys.setenv('PATH'=paste(path, '/home/rstudio/.local/bin', sep=':'))
 ```
@@ -58,7 +58,7 @@ dat$files = file.path(dbimagedir, dat$imgname)
 ### SIMULATION PARAMETERS ###
 fakePolySimConfig = list(
   # vector of sample sizes to simulate
-  ns = c(50, 100, 200, 400),
+  ns = c(200, 400),
   # number of simulations to run
   nsim=100,
   # number of bootstraps
@@ -94,7 +94,7 @@ fakePolySimConfig$betas = rep(0, length(fakePolySimConfig$rs))
 # 1 DF is real group
 groupSimConfig = fakePolySimConfig
 groupSimConfig$form = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan + dx_group" ))
-groupSimConfig$form = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan" ))
+groupSimConfig$formred = as.formula(paste0(" ~ sex + func_mean_fd + age_at_scan" ))
 groupSimConfig$output = '~/Dropbox (VUMC)/pbj/pbj_ftest/df1_dxgroup.rdata'
 
 # FAKE POLY IS 2 DOF
@@ -142,33 +142,21 @@ simFunc = function(lmfull, lmred, mask, data, nboot, cfts){
   data$fake_group = factor(ceiling(ppoints(nrow(data))*4 ) )
   data$fake_covariate1 = rnorm(nrow(data))
 
-  # compute Statistical maps
-  # Residuals from null model to use for permutation procedures
-  nullResids = lmPBJ(data$images, form=lmred, formred=~ 1, mask=mask, data=data, transform = 'none', robust=FALSE )$sqrtSigma
-  perm = function(n){
-    nullResids[sample(1:n),]
-  }
-  signedResids = sign(nullResids)
-  exchPerm = function(n){
-    signedResids[sample(1:n),]
-  }
-
   # t transform, robust, estimate covariance
   tRobustStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't' )
   # t transform, classical, estimate covariance
-  tStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't', robust=FALSE)
+  #tStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't', robust=FALSE)
   # Doesn't scale residuals by hat matrix diagonal
-  tPermStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't', HC3=FALSE )
+  #tPermStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't', HC3=FALSE )
   # no transform, robust, estimate covariance
   #robustStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform ='none')
   # no transform, classical, estimate covariance
-  plainstatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'none', robust=FALSE)
-  resids = plainstatmap$sqrtSigma
+  #plainstatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'none', robust=FALSE)
 
-  statmaps = c('tRobustStatmap', 'tStatmap', 'tPermStatmap')
+  statmaps = c('tRobustStatmap')
   out = list()
   # doesn't matter which statmap we use here
-  thrs = (cfts^2*plainstatmap$rdf) + plainstatmap$df
+  thrs = (cfts^2*tRobustStatmap$rdf) + tRobustStatmap$df
   # Apply each of the sampling methods
   for(statmapname in statmaps){
 
@@ -176,29 +164,29 @@ simFunc = function(lmfull, lmred, mask, data, nboot, cfts){
     statmap = get(statmapname)
     # normal bootstrap
     #pbjNorm = getBoots(pbjSEI(statmap, nboot = nboot, cfts.s = cfts))
-    if(statmapname %in% c('tRobustStatmap', 'tStatmap')){
+    if(statmapname %in% c('tRobustStatmap')){
       pbjNormT = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, method='t')
       # Rademacher bootstrap
       pbjRadT = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1}, method='t')
     }
-    if(statmapname=='tRobustStatmap'){
-      pbjRadRobust = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1}, method='robust')
-      pbjNormRobust = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, method='robust')
-      # exchangeable permutation
-      # scale out sign of Q from sqrtSigma -- sign comes from "permExch" function
-      statmap$sqrtSigma = sweep(statmap$sqrtSigma, MARGIN = c(1,2), STATS = sign(resids), FUN="*")
-      pbjPermExch = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = exchPerm, method='robust')
-    }
-    if(statmapname == 'tStatmap'){
-      pbjNorm = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, method='regular')
-      pbjRad = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1}, method='regular')
-    }
-
-    if(statmapname=='tPermStatmap'){
-      # now scale out residuals from sqrtSigma -- scale comes from "perm" function
-      statmap$sqrtSigma = sweep(statmap$sqrtSigma, MARGIN = c(1,2), STATS = resids, FUN="/")
-      pbjPerm = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = perm, method='robust')
-    }
+    # if(statmapname=='tRobustStatmap'){
+    #   pbjRadRobust = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1}, method='robust')
+    #   pbjNormRobust = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, method='robust')
+    #   # exchangeable permutation
+    #   # scale out sign of Q from sqrtSigma -- sign comes from "permExch" function
+    #   statmap$sqrtSigma = sweep(statmap$sqrtSigma, MARGIN = c(1,2), STATS = sign(resids), FUN="*")
+    #   pbjPermExch = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = exchPerm, method='robust')
+    # }
+    # if(statmapname == 'tStatmap'){
+    #   pbjNorm = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, method='regular')
+    #   pbjRad = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = function(n){ 2*rbinom(n, size=1, prob=0.5)-1}, method='regular')
+    # }
+    # 
+    # if(statmapname=='tPermStatmap'){
+    #   # now scale out residuals from sqrtSigma -- scale comes from "perm" function
+    #   statmap$sqrtSigma = sweep(statmap$sqrtSigma, MARGIN = c(1,2), STATS = resids, FUN="/")
+    #   pbjPerm = pbjInference(statmap, nboot = nboot, thr = thrs, mask=statmap$mask, statistic=simStats, rboot = perm, method='robust')
+    # }
     # collect output
     PBJnames = grep('^pbj', ls(), value=TRUE)
     allnames = paste(statmapname, PBJnames, sep='_')
@@ -214,7 +202,7 @@ simFunc = function(lmfull, lmred, mask, data, nboot, cfts){
 #debug(pbjInference)
 #simConfig = get("fakePolySimConfig")
 #simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$simdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
-#simtime = system.time(test <- simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS(file.path(simdirs$simdir[400], 'data.rds')), simConfig$nboot, simConfig$cfts.s))
+#simtime = system.time(test <- simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS(file.path(simdirs$simdir[200], 'data.rds')), simConfig$nboot, simConfig$cfts.s))
 ```
 
 # Run simulations
@@ -341,6 +329,6 @@ plots = function(rdata){
 Testing the second and third degree terms of a polynomial covariate.
 
 ```{r, eval=TRUE}
-debug(plots)
-plots('~/Dropbox (VUMC)/pbj/pbj_ftest/df5_agespline.rdata')
+#debug(plots)
+plots('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_polynomial.rdata')
 ```
