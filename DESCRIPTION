@@ -8,6 +8,7 @@ Description: More about what it does (maybe more than one line)
 License: GPL-3
 Encoding: UTF-8
 Collate:
+  'downloadABIDE.R'
   'genSimData.R'
   'master.R'
 Imports:
@@ -16,5 +17,7 @@ Imports:
   pbj,
   pbmcapply,
   RNifti
+Depends:
+  httr
 LazyData: true
 RoxygenNote: 7.1.0
