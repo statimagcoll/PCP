@@ -123,7 +123,5 @@ downloadABIDE <- function(outdir, force = FALSE) {
     downloadABIDEFile(md5list, files$url[i], files$destfile[i], force)
   }
 
-  # TODO: create combination mask file if needed
-  #mask_files <- subset(files, derivative == 'func_mask', destfile, drop = TRUE)
-  #mask <- apply(simplify2array(readNifti(mask_files)), 4, function(x) all(x == 1))
+  return(meta)
 }
