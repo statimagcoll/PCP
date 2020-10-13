@@ -93,7 +93,7 @@ downloadABIDE <- function(outdir, force = FALSE) {
 
   # all strategies: filt_global | filt_noglobal | nofilt_global |
   #   nofilt_noglobal
-  strategy <- "filt_global"
+  strategies <- "filt_global"
 
   # all derivatives: alff | degree_binarize | degree_weighted | dual_regression |
   #   eigenvector_binarize | eigenvector_weighted | falff | func_mask |
@@ -101,20 +101,29 @@ downloadABIDE <- function(outdir, force = FALSE) {
   #   rois_cc400 | rois_dosenbach160 | rois_ez | rois_ho | rois_tt | vmhc
   derivatives <- c("alff", "func_mask")
 
-  # NOTE: assuming only one strategy
+  # compile list of files to fetch
+  # NOTE: excluding strategy from destination directory structure since there's
+  #       only 1
   baseurl <- "https://s3.amazonaws.com/fcp-indi/data/Projects/ABIDE_Initiative/Outputs"
-  for (pipeline in pipelines) {
-    for (derivative in derivatives) {
-      destdir <- file.path(neurodir, pipeline, derivative)
-      if (!dir.exists(destdir)) {
-        dir.create(destdir, recursive = TRUE)
-      }
-      for (file_id in meta$file_id) {
-        filename <- paste0(file_id, "_", derivative, ".nii.gz")
-        url <- paste(baseurl, pipeline, strategy, derivative, filename, sep = "/")
-        destfile <- file.path(destdir, filename)
-        downloadABIDEFile(md5list, url, destfile, force)
-      }
-    }
+  files <- expand.grid(pipeline = pipelines, strategy = strategies,
+                       derivative = derivatives, file_id = meta$file_id)
+  files$destdir <- file.path(neurodir, files$pipeline, files$derivative)
+  files$filename <- paste0(files$file_id, "_", files$derivative, ".nii.gz")
+  files$destfile <- file.path(files$destdir, files$filename)
+  files$url <- paste(baseurl, files$pipeline, files$strategy, files$derivative, files$filename, sep = "/")
+
+  # create destination directories if needed
+  destdirs <- unique(files$destdir)
+  for (i in which(!dir.exists(destdirs))) {
+    dir.create(destdirs[i], recursive = TRUE)
   }
+
+  # download files if needed
+  for (i in 1:nrow(files)) {
+    downloadABIDEFile(md5list, files$url[i], files$destfile[i], force)
+  }
+
+  # TODO: create combination mask file if needed
+  #mask_files <- subset(files, derivative == 'func_mask', destfile, drop = TRUE)
+  #mask <- apply(simplify2array(readNifti(mask_files)), 4, function(x) all(x == 1))
 }
