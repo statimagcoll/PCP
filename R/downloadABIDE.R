@@ -37,6 +37,12 @@ downloadABIDEFile <- function(md5list, url, destfile, force) {
   }
 }
 
+#' Download ABIDE data for analysis.
+#'
+#' @param outdir A directory to save the output files.
+#' @param force Always re-download existing files.
+#' @return Returns a data frame of ABIDE demographic data.
+#' @export
 downloadABIDE <- function(outdir, force = FALSE) {
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
