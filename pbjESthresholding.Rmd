@@ -159,8 +159,6 @@ if(!file.exists(simConfig$output)){
 
 ```{r, figuresetup}
 # also sets up the data frame with the output
-slice = 30
-cex = 1.5
 
 # initialize output for loop
 blankimg = mask = readNifti(maskfile)
@@ -211,6 +209,7 @@ for(rowInd in 1:nrow(allimgout)){
 
 #sapply(allimgout[ allimgout$value==0.25, 'robustStatmapMean'], function(x){x = x[,,30]; mask=mask[,,30]; quantile(x[ mask==1]) } )
 #0.25^2*(simConfig$ns-ncol(design$X)) + design$df
+save(allimgout, simConfig, template, file=file.path(dirname(simConfig$output), 'EST_reproducible_figs.rdata') )
 ```
 
 
@@ -218,6 +217,7 @@ for(rowInd in 1:nrow(allimgout)){
 ```{r figure1, fig.width=11, fig.height=4.5}
 sval = 0.20
 pval = 0.001
+slice = 30
 subimgout = allimgout[(allimgout$method=='p' & allimgout$value==pval) | (allimgout$method=='S' & allimgout$value==sval),]
 
 cex=1.5
