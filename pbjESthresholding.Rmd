@@ -217,116 +217,135 @@ save(allimgout, simConfig, template, file=file.path(dirname(simConfig$output), '
 ```{r figure1, fig.width=11, fig.height=4.5}
 sval = 0.20
 pval = 0.001
-slice = 30
-subimgout = allimgout[(allimgout$method=='p' & allimgout$value==pval) | (allimgout$method=='S' & allimgout$value==sval),]
+slices = 1:dim(allimgout$tStatmapPower[[1]])[3]
 
-cex=1.5
-# graphical parameters
-fgcol = 'white'
-bgcol = 'black'
-par(mgp=c(0.9,.7,0), lwd=1.5, lend=2,
-    cex.lab=cex, cex.axis=0.8*cex, cex.main=1*cex,
-    mar=c(0.5,2.2,2,0), bty='l', oma=c(0.5,0,2,0), bg=bgcol, fg=fgcol, col.axis=fgcol, col.lab=fgcol, col.main = fgcol, col.sub=fgcol)
-layout(matrix(1:12, nrow=2, byrow=TRUE))
-for(statmap in c('robustStatmapMean', 'tStatmapMean')){
-  for(rowInd in 1:nrow(subimgout)){
-    n = subimgout[rowInd, 'n']
-    method = subimgout[rowInd, 'method']
-    value = subimgout[rowInd, 'value']
-    
-    design = pbj::getDesign(simConfig$form, simConfig$formred, data=simConfig$dat)
-    if(method=='p'){
-      chisqValue = qchisq(value, df=design$df, lower.tail=FALSE)
-      othermethod = 'S'
-      othervalue = round(sqrt(pmax((chisqValue - design$df)/n, 0)), 3)
-    } else {
-      #chisqValue = value^2*(n-ncol(design$X)) + design$df
-      chisqValue = value^2*(n) + design$df
-      othermethod = 'p'
-      othervalue = round(pchisq(chisqValue, df=design$df, lower.tail = FALSE), 3)
+for(sval in simConfig$cfts.s){
+  for(pval in simConfig$cfts.p){
+    for(slice in slices){
+      for(statmap in c('robustStatmapMean', 'tStatmapMean')){
+        subimgout = allimgout[(allimgout$method=='p' & allimgout$value==pval) | (allimgout$method=='S' & allimgout$value==sval),]
+        fname = file.path(dirname(simConfig$output), 'images', paste0(statmap, '_p', pval, '_s', sval, '_slice', slice, '.png') )
+        dir.create(dirname(fname), showWarnings = FALSE, recursive = TRUE)
+        png(filename = fname, height=4.5, width=11, units = 'in', res = 300)
+        cex=1.5
+        # graphical parameters
+        fgcol = 'white'
+        bgcol = 'black'
+        par(mgp=c(0.9,.7,0), lwd=1.5, lend=2,
+            cex.lab=cex, cex.axis=0.8*cex, cex.main=1*cex,
+            mar=c(0.5,2.2,2,0), bty='l', oma=c(0.5,0,2,0), bg=bgcol, fg=fgcol, col.axis=fgcol, col.lab=fgcol, col.main = fgcol, col.sub=fgcol)
+        layout(matrix(1:12, nrow=2, byrow=TRUE))
+        for(rowInd in 1:nrow(subimgout)){
+          n = subimgout[rowInd, 'n']
+          method = subimgout[rowInd, 'method']
+          value = subimgout[rowInd, 'value']
+          
+          design = pbj::getDesign(simConfig$form, simConfig$formred, data=simConfig$dat)
+          if(method=='p'){
+            chisqValue = qchisq(value, df=design$df, lower.tail=FALSE)
+            othermethod = 'S'
+            othervalue = round(sqrt(pmax((chisqValue - design$df)/n, 0)), 3)
+          } else {
+            #chisqValue = value^2*(n-ncol(design$X)) + design$df
+            chisqValue = value^2*(n) + design$df
+            othermethod = 'p'
+            othervalue = round(pchisq(chisqValue, df=design$df, lower.tail = FALSE), 3)
+          }
+          if(othervalue==0){
+            othervalue = '<0.001'
+          } else {
+            othervalue = paste0('=', othervalue)
+          }
+          blankimg = subimgout[[rowInd, statmap]]
+          image(blankimg, template, thresh=chisqValue, index=slice, cex=cex*0.7)
+          title(paste0('n=', n, ', ', othermethod, othervalue))
+          if(rowInd == 1){ mtext(paste0(method, '=', value), side=2, cex=cex, font=2)}
+          if(rowInd == length(unique(subimgout$n))+1){ mtext(paste0(method, '=', value), side=2, cex=cex, font=2)}
+        }
+        # if(statmap=='tStatmapMean'){
+        #   mtext('T-statistic', side=3, outer = TRUE, cex=1*cex, font=2)
+        # } else {
+        #   mtext('Robust statistic', side=3, outer = TRUE, cex=1*cex, font=2)
+        # }
+        mtext('Target', side=3, outer = TRUE, cex=1*cex, font=2)
+        dev.off()
+      }
     }
-    if(othervalue==0){
-      othervalue = '<0.001'
-    } else {
-      othervalue = paste0('=', othervalue)
-    }
-    blankimg = subimgout[[rowInd, statmap]]
-    image(blankimg, template, thresh=chisqValue, index=slice, cex=cex*0.7)
-    title(paste0('n=', n, ', ', othermethod, othervalue))
-    if(rowInd == 1){ mtext(paste0(method, '=', value), side=2, cex=cex, font=2)}
-    if(rowInd == length(unique(subimgout$n))+1){ mtext(paste0(method, '=', value), side=2, cex=cex, font=2)}
   }
-  # if(statmap=='tStatmapMean'){
-  #   mtext('T-statistic', side=3, outer = TRUE, cex=1*cex, font=2)
-  # } else {
-  #   mtext('Robust statistic', side=3, outer = TRUE, cex=1*cex, font=2)
-  # }
-  mtext('Target', side=3, outer = TRUE, cex=1*cex, font=2)
 }
+
 ```
 
 
 # Figure for probability
 ```{r figure2, fig.width=11, fig.height=4.5}
 color.bar <- function(lut, min, max=-min, nticks=11, ticks=seq(min, max, len=nticks), title='') {
-    scale = (length(lut)-1)/(max-min)
-    plot(c(0,10), c(min,max), type='n', bty='n', xaxt='n', xlab='', yaxt='n', ylab='', main=title)
-    axis(2, round(ticks, 2), las=1, cex.axis=cex*0.7, font=2)
-    for (i in 1:(length(lut)-1)) {
-     y = (i-1)/scale + min
-     rect(0,y,10,y+1/scale, col=lut[i], border=NA)
-    }
+  scale = (length(lut)-1)/(max-min)
+  plot(c(0,10), c(min,max), type='n', bty='n', xaxt='n', xlab='', yaxt='n', ylab='', main=title)
+  axis(2, round(ticks, 2), las=1, cex.axis=cex*0.7, font=2)
+  for (i in 1:(length(lut)-1)) {
+    y = (i-1)/scale + min
+    rect(0,y,10,y+1/scale, col=lut[i], border=NA)
+  }
 }
 # color thresholding for visualization and colorbar
 threshs = c(0.05, 0.8)
-sval = 0.20
-pval = 0.001
-subimgout = allimgout[(allimgout$method=='p' & allimgout$value==pval) | (allimgout$method=='S' & allimgout$value==sval),]
-
 cex=1.5
+
 # graphical parameters
 fgcol = 'white'
 bgcol = 'black'
 
-layout(cbind(matrix(1:12, nrow=2, byrow=TRUE) %x% matrix(1, nrow=3, ncol=3) , 13))
-for(statmap in c('robustStatmapPower', 'tStatmapPower')){
-  par(mgp=c(0.9,.7,0), lwd=1.5, lend=2,
-    cex.lab=cex, cex.axis=0.8*cex, cex.main=1*cex,
-    mar=c(0.5,2.2,2,0), bty='l', oma=c(0.5,0,2,0), bg=bgcol, fg=fgcol, col.axis=fgcol, col.lab=fgcol, col.main = fgcol, col.sub=fgcol)
-  for(rowInd in 1:nrow(subimgout)){
-    n = subimgout[rowInd, 'n']
-    method = subimgout[rowInd, 'method']
-    value = subimgout[rowInd, 'value']
-    
-    design = pbj::getDesign(simConfig$form, simConfig$formred, data=simConfig$dat)
-    if(method=='p'){
-      chisqValue = qchisq(value, df=design$df, lower.tail=FALSE)
-      othermethod = 'S'
-      othervalue = round(sqrt(pmax((chisqValue - design$df)/n, 0)), 3)
-    } else {
-      #chisqValue = value^2*(n-ncol(design$X)) + design$df
-      chisqValue = value^2*(n) + design$df
-      othermethod = 'p'
-      othervalue = round(pchisq(chisqValue, df=design$df, lower.tail = FALSE), 3)
+for(sval in simConfig$cfts.s){
+  for(pval in simConfig$cfts.p){
+    for(slice in slices){
+      for(statmap in c("robustStatmapPower", "tStatmapPower")){
+        subimgout = allimgout[(allimgout$method=='p' & allimgout$value==pval) | (allimgout$method=='S' & allimgout$value==sval),]
+        fname = file.path(dirname(simConfig$output), 'images', paste0(statmap, '_p', pval, '_s', sval, '_slice', slice, '.png') )
+        dir.create(dirname(fname), showWarnings = FALSE, recursive = TRUE)
+        png(filename = fname, height=4.5, width=11, units = 'in', res = 300)
+        layout(cbind(matrix(1:12, nrow=2, byrow=TRUE) %x% matrix(1, nrow=3, ncol=3) , 13))
+        par(mgp=c(0.9,.7,0), lwd=1.5, lend=2,
+            cex.lab=cex, cex.axis=0.8*cex, cex.main=1*cex,
+            mar=c(0.5,2.2,2,0), bty='l', oma=c(0.5,0,2,0), bg=bgcol, fg=fgcol, col.axis=fgcol, col.lab=fgcol, col.main = fgcol, col.sub=fgcol)
+        for(rowInd in 1:nrow(subimgout)){
+          n = subimgout[rowInd, 'n']
+          method = subimgout[rowInd, 'method']
+          value = subimgout[rowInd, 'value']
+          
+          design = pbj::getDesign(simConfig$form, simConfig$formred, data=simConfig$dat)
+          if(method=='p'){
+            chisqValue = qchisq(value, df=design$df, lower.tail=FALSE)
+            othermethod = 'S'
+            othervalue = round(sqrt(pmax((chisqValue - design$df)/n, 0)), 3)
+          } else {
+            #chisqValue = value^2*(n-ncol(design$X)) + design$df
+            chisqValue = value^2*(n) + design$df
+            othermethod = 'p'
+            othervalue = round(pchisq(chisqValue, df=design$df, lower.tail = FALSE), 3)
+          }
+          if(othervalue==0){
+            othervalue = '<0.001'
+          } else {
+            othervalue = paste0('=', othervalue)
+          }
+          blankimg = subimgout[[rowInd, statmap]]
+          image(blankimg, template, thresh=threshs, index=slice, cex=cex*0.7)
+          title(paste0('n=', n, ', ', othermethod, othervalue))
+          if(rowInd == 1){ mtext(paste0(method, '=', value), side=2, cex=cex, font=2)}
+          if(rowInd == length(unique(subimgout$n))+1){ mtext(paste0(method, '=', value), side=2, cex=cex, font=2)}
+        }
+        # if(statmap=='tStatmapPower'){
+        #   mtext('T-statistic', side=3, outer = TRUE, cex=1*cex, font=2)
+        # } else {
+        #   mtext('Robust statistic', side=3, outer = TRUE, cex=1*cex, font=2)
+        # }
+        mtext('Probability', side=3, outer = TRUE, cex=1*cex, font=2)
+        par(mar=c(10,2.5,10,0.5))
+        color.bar(pbj:::redyellow(64), min=threshs[1], max=threshs[2], nticks=4)
+        dev.off()
+      }
     }
-    if(othervalue==0){
-      othervalue = '<0.001'
-    } else {
-      othervalue = paste0('=', othervalue)
-    }
-    blankimg = subimgout[[rowInd, statmap]]
-    image(blankimg, template, thresh=threshs, index=slice, cex=cex*0.7)
-    title(paste0('n=', n, ', ', othermethod, othervalue))
-    if(rowInd == 1){ mtext(paste0(method, '=', value), side=2, cex=cex, font=2)}
-    if(rowInd == length(unique(subimgout$n))+1){ mtext(paste0(method, '=', value), side=2, cex=cex, font=2)}
   }
-  # if(statmap=='tStatmapPower'){
-  #   mtext('T-statistic', side=3, outer = TRUE, cex=1*cex, font=2)
-  # } else {
-  #   mtext('Robust statistic', side=3, outer = TRUE, cex=1*cex, font=2)
-  # }
-  mtext('Probability', side=3, outer = TRUE, cex=1*cex, font=2)
-  par(mar=c(10,2.5,10,0.5))
-  color.bar(pbj:::redyellow(64), min=threshs[1], max=threshs[2], nticks=4)
 }
 ```
