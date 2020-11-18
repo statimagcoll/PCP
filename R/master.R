@@ -82,6 +82,7 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
   #' A random voxel is chosen within the mask and a sphere is placed at that location.
   #' The spheres are masked by the mask image so that no parameter values exist outside the mask.
   #' @param simdirs Vector of simulation directories created by simSetup.
+  #' @param sims Vector of integers specifying simulation index. Does not have to be unique. Can be used for running a particular analysis in every kth simulation.
   #' @param simfunc Function to evaluate on the simulated data.
   #' @param simfuncArgs List of arguments passed to simfunc.
   #' @param mask mask image argument passed to genSimData. Only required for genSimData function if betaimg is not NULL or if method='synthetic'
@@ -94,9 +95,9 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
   #' @importFrom pbapply pblapply
   #' @importFrom pbj addSignal
   #' @export
-  runSim = function(simdirs, simfunc, simfuncArgs=NULL, mask=NULL, method=c('bootstrap', 'synthetic'), ncores=parallel::detectCores(), ...){
+  runSim = function(simdirs, sims, simfunc, simfuncArgs=NULL, mask=NULL, method=c('bootstrap', 'synthetic'), ncores=parallel::detectCores(), ...){
     result = if(ncores>1){
-      pbmcapply::pbmclapply(simdirs, function(simdir, simfunc, method, mask){
+      pbmcapply::pbmcmapply(function(simdir, sim, simfunc, method, mask){
       # load data
       dat = readRDS(file.path(simdir, 'data.rds'))
 
@@ -110,13 +111,14 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
       # adds artificial signal to images
       dat$images = dat$tmpfiles
 
+      simfuncArgs$sim = sim
       simfuncArgs$data = dat
       result = do.call(simfunc, args = simfuncArgs)
       unlink(dat$images)
       return(result)
-    }, simfunc = simfunc, method = method, mask=mask, mc.cores = ncores, ...)
+    }, simdir=simdirs, sim=sims, MoreArgs(simfunc = simfunc, method = method, mask=mask), mc.cores = ncores, ...)
     } else {
-      pbapply::pblapply(simdirs, function(simdir, simfunc, method, mask){
+      pbapply::pbmapply(function(simdir, sims, simfunc, method, mask){
         # load data
         dat = readRDS(file.path(simdir, 'data.rds'))
 
@@ -130,11 +132,12 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
         # adds artificial signal to images
         dat$images = dat$tmpfiles
 
+        simfuncArgs$sim = sim
         simfuncArgs$data = dat
         result = do.call(simfunc, args = simfuncArgs)
         unlink(dat$images)
         return(result)
-      }, simfunc = simfunc, method = method, mask=mask )
+      }, simdir=simdirs, sim=sims, MoreArgs(simfunc = simfunc, method = method, mask=mask ))
     }
     return(result)
   }

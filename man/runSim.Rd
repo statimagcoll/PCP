@@ -6,6 +6,7 @@
 \usage{
 runSim(
   simdirs,
+  sims,
   simfunc,
   simfuncArgs = NULL,
   mask = NULL,
@@ -16,6 +17,8 @@ runSim(
 }
 \arguments{
 \item{simdirs}{Vector of simulation directories created by simSetup.}
+
+\item{sims}{Vector of integers specifying simulation index. Does not have to be unique. Can be used for running a particular analysis in every kth simulation.}
 
 \item{simfunc}{Function to evaluate on the simulated data.}
 

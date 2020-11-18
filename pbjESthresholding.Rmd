@@ -27,8 +27,8 @@ set.seed(555)
 
 ```{r simsetup}
 # install the latest versions of the packages to perform these analyses.
-devtools::install_github('simonvandekar/pbj', ref='ftest')
-devtools::install_github('statimagcoll/NIsim', ref='master')
+#devtools::install_github('simonvandekar/pbj', ref='ftest')
+#devtools::install_github('statimagcoll/NIsim', ref='master')
 
 ### LIBRARIES ###
 library(RNifti)
@@ -82,7 +82,8 @@ simConfig = list(
   # vector of sample sizes to simulate
   ns = 25 * 2^(0:5),
   # number of simulations to run
-  nsim=10000,
+  nsim=100,
+  nboot=10,
   # cluster forming thresholds
   cfts.s = c(0.1, 0.2, 0.25, 0.4),
   cfts.p = c(0.05, 0.01, 0.001),
@@ -112,14 +113,30 @@ simConfig$betas = rep(0, length(simConfig$rs))
 
 ## Simulation functions
 ```{r simulationFunctions}
-simFunc = function(lmfull, lmred, mask, data){
+simFunc = function(lmfull, lmred, mask, data, cfts.s, cfts.p, nboot, sim, seiIts=10){
   HC3RobustStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'none', HC3 = TRUE )
   # t transform, classical, estimate covariance
   tStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't', robust=FALSE, HC3=TRUE)
-  out = list('tStatmap' = tStatmap$stat, 'HC3RobustStatmap'=HC3RobustStatmap$stat)
+  
+  # These probably don't work
+  if(!sim %% seiIts){
+  seiResultsT = pbjSEI(tStatmap, cfts.s=cfts.s, nboot = nboot, method='t')
+  seiResultsRobust = pbjSEI(HC3RobustStatmap, cfts.s=cfts.s, nboot = nboot, rboot=function(n){ (2*rbinom(n, size=1, prob=0.5)-1)}, method='t')
+  } else {
+    seiResultsT = NULL
+    seiResultsRobust = NULL
+  }
+  
+  out = list('tStatmap' = tStatmap$stat, 'HC3RobustStatmap'=HC3RobustStatmap$stat, 'tSEI'=seiResultsT, 'HC3RobustSEI'=seiResultsRobust)
   gc()
   return(out)
 }
+
+
+simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$simdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
+simtime = system.time(test <- simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS(file.path(simdirs$simdir[200], 'data.rds')), 2, cfts.s = simConfig$cfts.s, nboot=simConfig$nboot, sim=simdirs$sim[200]))
+#stop('not an error.')
+#simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS(file.path(simdirs$simdir[200], 'data.rds')))
 ```
 
 # Run simulations
@@ -138,7 +155,7 @@ if(!file.exists(simConfig$output)){
   # mix this up so that large sample simulations aren't all dropped on one "thread".
   simdirs = simdirs[sample(1:nrow(simdirs)),]
   
-  results = runSim(simdirs$simdir, method=simConfig$method,
+  results = runSim(simdirs=simdirs$simdir, sim=simdirs$sim, method=simConfig$method,
                    simfunc = simFunc, mask = simConfig$mask,
                    simfuncArgs = list(
                      lmfull= simConfig$form,
