@@ -116,7 +116,7 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
       result = do.call(simfunc, args = simfuncArgs)
       unlink(dat$images)
       return(result)
-    }, simdir=simdirs, sim=sims, MoreArgs(simfunc = simfunc, method = method, mask=mask), mc.cores = ncores, ...)
+    }, simdir=simdirs, sim=sims, MoreArgs=list(simfunc = simfunc, method = method, mask=mask), mc.cores = ncores, ...)
     } else {
       pbapply::pbmapply(function(simdir, sims, simfunc, method, mask){
         # load data
@@ -137,7 +137,7 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
         result = do.call(simfunc, args = simfuncArgs)
         unlink(dat$images)
         return(result)
-      }, simdir=simdirs, sim=sims, MoreArgs(simfunc = simfunc, method = method, mask=mask ))
+      }, simdir=simdirs, sim=sims, MoreArgs=list(simfunc = simfunc, method = method, mask=mask ))
     }
     return(result)
   }
