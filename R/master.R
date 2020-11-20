@@ -139,7 +139,7 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
         return(result)
       }, simdir=simdirs, sim=sims, MoreArgs=list(simfunc = simfunc, method = method, mask=mask ))
     }
-    return(result)
+    return(list(result))
   }
 
 
