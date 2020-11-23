@@ -36,12 +36,11 @@ residualizeImages = function(files, form, dat, mask, outfiles=NULL, outrds=NULL,
   X = model.matrix(form, data=dat)
   cat('regressing out covariates.\n')
   y = qr.resid(qr(X), y)
-  invisible(sapply(dirname(outfiles), dir.create, showWarnings=FALSE) )
-
   if(!is.null(outrds)){
-    saveRDS(y, outfiles)
+    saveRDS(y, outrds)
   }
   if(!is.null(outfiles) ) {
+    invisible(sapply(dirname(outfiles), dir.create, showWarnings=FALSE) )
     # save out images
     temp = mask
     invisible(lapply(1:nrow(y), function(ind){ temp[ temp==1] = y[ind,]
