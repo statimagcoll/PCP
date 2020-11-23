@@ -1,11 +1,4 @@
----
-title: "Evaluates effect size thresholding"
-author: "Simon Vandekar"
-date: "10/13/2020"
-output: html_document
----
-
-```{r setup, include=FALSE}
+## ----setup, include=FALSE-----------------------------------------------------
 knitr::knit_hooks$set(GPs=function(before, options, envir){
   if (before){
     cex=1.5
@@ -20,12 +13,9 @@ knitr::opts_chunk$set(echo = FALSE, fig.height = 4, fig.width = 4, GPs=TRUE, cac
 path = Sys.getenv('PATH')
 path = Sys.setenv('PATH'=paste(path, '/home/rstudio/.local/bin', sep=':'))
 set.seed(555)
-```
 
 
-## Setup simulations
-
-```{r simsetup}
+## ----simsetup-----------------------------------------------------------------
 # install the latest versions of the packages to perform these analyses.
 devtools::install_github('simonvandekar/pbj', ref='ftest')
 devtools::install_github('statimagcoll/NIsim', ref='master')
@@ -97,12 +87,9 @@ dat$files = file.path(dbimagedir, dat$imgname)
   writeNifti(mask, maskfile)
   nvox = sum(mask)
   rm(imgs)
-```
 
-`r nexcluded` subjects excluded for low coverage. `r nrow(dat)` subjects in the data set. There are `r nvox` voxels in the mask.
 
-## Simulation Configuration
-```{r, simconfig}
+## ---- simconfig---------------------------------------------------------------
 ### SIMULATION PARAMETERS ###
 simConfig = list(
   # vector of sample sizes to simulate
@@ -135,10 +122,9 @@ simConfig = list(
 )
 simConfig$betas = rep(0, length(simConfig$rs))
 simConfig$output = file.path(datadir, '../pbj_ftest', paste0('EST_reproducible_nsim', simConfig$nsim, '.rdata'))
-```
 
-## Simulation functions
-```{r simulationFunctions}
+
+## ----simulationFunctions------------------------------------------------------
 simFunc = function(lmfull, lmred, mask, data, cfts.s, cfts.p, nboot, sim, seiIts=10){
   HC3RobustStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'none', HC3 = TRUE )
   # t transform, classical, estimate covariance
@@ -165,10 +151,9 @@ simFunc = function(lmfull, lmred, mask, data, cfts.s, cfts.p, nboot, sim, seiIts
 
 #simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$simdir, nsim=simConfig$nsim, ns=simConfig$ns, mask=simConfig$mask, rs=simConfig$rs, betas=simConfig$betas )
 #simtime = system.time(test <- simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS(file.path(simdirs$simdir[200], 'data.rds')), 2, cfts.s = simConfig$cfts.s, nboot=simConfig$nboot, sim=simdirs$sim[200]))
-```
 
-# Run simulations
-```{r runSims, eval=TRUE}
+
+## ----runSims, eval=TRUE-------------------------------------------------------
 if(!file.exists(simConfig$output)){
   ### SETUP THE SIMULATION ANALYSIS ###
   # subsets dataset to all people who have the variables
@@ -200,12 +185,9 @@ if(!file.exists(simConfig$output)){
   gc()
   stop('not an error. Finished simulations.')
 }
-```
 
 
-## Draw image results
-
-```{r, figuresetup}
+## ---- figuresetup-------------------------------------------------------------
 # also sets up the data frame with the output
 
 # initialize output for loop
@@ -290,11 +272,9 @@ for(rowInd in 1:nrow(allimgout)){
 #sapply(allimgout[ allimgout$value==0.25, 'robustStatmapMean'], function(x){x = x[,,30]; mask=mask[,,30]; quantile(x[ mask==1]) } )
 #0.25^2*(simConfig$ns-ncol(design$X)) + design$df
 save(allimgout, simConfig, template, file=file.path(dirname(simConfig$output), 'EST_reproducible_figs.rdata') )
-```
 
 
-# Figure for Evidence
-```{r figure1, fig.width=11, fig.height=4.5}
+## ----figure1, fig.width=11, fig.height=4.5------------------------------------
 sval = 0.20
 pval = 0.001
 slices = 18:44
@@ -354,11 +334,9 @@ for(sval in simConfig$cfts.s){
   }
 }
 
-```
 
 
-# Figure for probability
-```{r figure2, fig.width=11, fig.height=4.5}
+## ----figure2, fig.width=11, fig.height=4.5------------------------------------
 color.bar <- function(lut, min, max=-min, nticks=11, ticks=seq(min, max, len=nticks), title='') {
   scale = (length(lut)-1)/(max-min)
   plot(c(0,10), c(min,max), type='n', bty='n', xaxt='n', xlab='', yaxt='n', ylab='', main=title)
@@ -428,10 +406,9 @@ for(sval in simConfig$cfts.s){
     }
   }
 }
-```
 
 
-```{r figure3, fig.width=11, fig.height=4.5}
+## ----figure3, fig.width=11, fig.height=4.5------------------------------------
 color.bar <- function(lut, min, max=-min, nticks=11, ticks=seq(min, max, len=nticks), title='') {
   scale = (length(lut)-1)/(max-min)
   plot(c(0,10), c(min,max), type='n', bty='n', xaxt='n', xlab='', yaxt='n', ylab='', main=title)
@@ -501,4 +478,4 @@ for(sval in simConfig$cfts.s){
     }
   }
 }
-```
+

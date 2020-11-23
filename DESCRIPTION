@@ -11,6 +11,7 @@ Collate:
   'downloadABIDE.R'
   'genSimData.R'
   'master.R'
+  'residualizeImages.R'
 Imports:
   parallel,
   pbapply,

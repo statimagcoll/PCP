@@ -6,7 +6,7 @@
 \usage{
 genSimData(
   files,
-  outfiles = NULL,
+  outfiles,
   betaimg = NULL,
   mask = NULL,
   method = c("bootstrap", "synthetic")
