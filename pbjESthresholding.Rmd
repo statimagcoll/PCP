@@ -130,7 +130,7 @@ simConfig = list(
   simdir = '~/temp',
   dat = dat,
   mask = maskfile,
-  ncores = 24,
+  ncores = 12,
   method='bootstrap'
 )
 simConfig$betas = rep(0, length(simConfig$rs))
@@ -145,19 +145,20 @@ simFunc = function(lmfull, lmred, mask, data, cfts.s, cfts.p, nboot, sim, seiIts
   tStatmap = lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't', robust=FALSE, HC3=TRUE)
   
   # These probably don't work
-  if(!sim %% seiIts){
-    invisible(capture.output(seiResultsT <- pbjSEI(tStatmap, cfts.s=cfts.s, nboot = nboot, method='t')))
-    invisible(capture.output(seiResultsRobust <- pbjSEI(HC3RobustStatmap, cfts.s=cfts.s, nboot = nboot, rboot=function(n){ (2*rbinom(n, size=1, prob=0.5)-1)}, method='t') ))
-    invisible(capture.output(seiResultsTp <- pbjSEI(tStatmap, cfts.p=cfts.p, nboot = nboot, method='t')))
-    invisible(capture.output(seiResultsRobustp <- pbjSEI(HC3RobustStatmap, cfts.p=cfts.p, nboot = nboot, rboot=function(n){ (2*rbinom(n, size=1, prob=0.5)-1)}, method='t')))
-  } else {
-    seiResultsT = NA
-    seiResultsRobust = NA
-    seiResultsTp = NA
-    seiResultsRobustp = NA
-  }
-  
-  out = list('tStatmap' = tStatmap$stat, 'HC3RobustStatmap'=HC3RobustStatmap$stat, 'tSEI'=seiResultsT, 'HC3RobustSEI'=seiResultsRobust, 'tSEIp'=seiResultsTp, 'HC3RobustSEIp'=seiResultsRobustp)
+  #if(!sim %% seiIts){
+  #  invisible(capture.output(seiResultsT <- pbjSEI(tStatmap, cfts.s=cfts.s, nboot = nboot, method='t')))
+  #  invisible(capture.output(seiResultsRobust <- pbjSEI(HC3RobustStatmap, cfts.s=cfts.s, nboot = nboot, rboot=function(n){ (2*rbinom(n, size=1, prob=0.5)-1)}, method='t') ))
+  #  invisible(capture.output(seiResultsTp <- pbjSEI(tStatmap, cfts.p=cfts.p, nboot = nboot, method='t')))
+  #  invisible(capture.output(seiResultsRobustp <- pbjSEI(HC3RobustStatmap, cfts.p=cfts.p, nboot = nboot, rboot=function(n){ (2*rbinom(n, size=1, prob=0.5)-1)}, method='t')))
+  #} else {
+  #  seiResultsT = NA
+  #  seiResultsRobust = NA
+  #  seiResultsTp = NA
+  #  seiResultsRobustp = NA
+  #}
+  #
+  #out = list('tStatmap' = tStatmap$stat, 'HC3RobustStatmap'=HC3RobustStatmap$stat, 'tSEI'=seiResultsT, 'HC3RobustSEI'=seiResultsRobust, 'tSEIp'=seiResultsTp, 'HC3RobustSEIp'=seiResultsRobustp)
+  out = list('tStatmap' = tStatmap$stat, 'HC3RobustStatmap'=HC3RobustStatmap$stat)
   gc()
   return(out)
 }
@@ -219,6 +220,7 @@ load(simConfig$output)
 # fixes bad output from runSim... bug fixed in code, need to push to github.
 #results = lapply(1:nrow(simdirs), function(ind) results[(1 +(ind-1)* 6):(1 +(ind-1)* 6 + 5)] )
 #results = lapply(results, function(x){ names(x) = c('tStatmap', 'HC3RobustStatmap', 'tSEI', 'HC3RobustSEI', 'tSEIp', 'HC3RobustSEIp'); x})
+results = unlist(apply(results, 2, list), recursive=FALSE)
 simdirs$results = results
 for(rowInd in 1:nrow(allimgout)){
   cat(rowInd, '\n')
@@ -257,33 +259,33 @@ for(rowInd in 1:nrow(allimgout)){
   allimgout$robustStatmapMean[rowInd] = list(blankimg)
   rm(temp)
   
-  if(method=='S'){
-    cftname = paste0('cft.s', value)
-    # t type 1 error/power maps
-    blankimg[,,] = 0 
-    er = lapply(simdirs$results[simdirs$n==n], function(x){if(!is.na(x$tSEI[1])){ x$tSEI[[cftname]]$pmap> -log10(0.05)} else NA })
-    er = er[ !is.na(er)]
-    blankimg[,,] = rowMeans(simplify2array(er), dims=3)
-    allimgout$tStatMapSEIpower[rowInd] = list(blankimg)
-    # robust type 1 error/power maps
-    er = lapply(simdirs$results[simdirs$n==n], function(x){if(!is.na(x$HC3RobustSEI[1])){ x$HC3RobustSEI[[cftname]]$pmap> -log10(0.05)} else NA })
-    er = er[ !is.na(er)]
-    blankimg[,,] = rowMeans(simplify2array(er), dims=3)
-    allimgout$robustStatMapSEIpower[rowInd] = list(blankimg)
-  } else {
-    cftname = paste0('cft.p', value)
-    # t type 1 error/power maps
-    blankimg[,,] = 0 
-    er = lapply(simdirs$results[simdirs$n==n], function(x){if(!is.na(x$tSEIp[1])){ x$tSEIp[[cftname]]$pmap> -log10(0.05)} else NA })
-    er = er[ !is.na(er)]
-    blankimg[,,] = rowMeans(simplify2array(er), dims=3)
-    allimgout$tStatMapSEIpowerP[rowInd] = list(blankimg)
-    # robust type 1 error/power maps
-    er = lapply(simdirs$results[simdirs$n==n], function(x){if(!is.na(x$HC3RobustSEIp[1])){ x$HC3RobustSEIp[[cftname]]$pmap> -log10(0.05)} else NA })
-    er = er[ !is.na(er)]
-    blankimg[,,] = rowMeans(simplify2array(er), dims=3)
-    allimgout$robustStatMapSEIpowerP[rowInd] = list(blankimg)
-  }
+#  if(method=='S'){
+#    cftname = paste0('cft.s', value)
+#    # t type 1 error/power maps
+#    blankimg[,,] = 0 
+#    er = lapply(simdirs$results[simdirs$n==n], function(x){if(!is.na(x$tSEI[1])){ x$tSEI[[cftname]]$pmap> -log10(0.05)} else NA })
+#    er = er[ !is.na(er)]
+#    blankimg[,,] = rowMeans(simplify2array(er), dims=3)
+#    allimgout$tStatMapSEIpower[rowInd] = list(blankimg)
+#    # robust type 1 error/power maps
+#    er = lapply(simdirs$results[simdirs$n==n], function(x){if(!is.na(x$HC3RobustSEI[1])){ x$HC3RobustSEI[[cftname]]$pmap> -log10(0.05)} else NA })
+#    er = er[ !is.na(er)]
+#    blankimg[,,] = rowMeans(simplify2array(er), dims=3)
+#    allimgout$robustStatMapSEIpower[rowInd] = list(blankimg)
+#  } else {
+#    cftname = paste0('cft.p', value)
+#    # t type 1 error/power maps
+#    blankimg[,,] = 0 
+#    er = lapply(simdirs$results[simdirs$n==n], function(x){if(!is.na(x$tSEIp[1])){ x$tSEIp[[cftname]]$pmap> -log10(0.05)} else NA })
+#    er = er[ !is.na(er)]
+#    blankimg[,,] = rowMeans(simplify2array(er), dims=3)
+#    allimgout$tStatMapSEIpowerP[rowInd] = list(blankimg)
+#    # robust type 1 error/power maps
+#    er = lapply(simdirs$results[simdirs$n==n], function(x){if(!is.na(x$HC3RobustSEIp[1])){ x$HC3RobustSEIp[[cftname]]$pmap> -log10(0.05)} else NA })
+#    er = er[ !is.na(er)]
+#    blankimg[,,] = rowMeans(simplify2array(er), dims=3)
+#    allimgout$robustStatMapSEIpowerP[rowInd] = list(blankimg)
+#  }
   
 }
 
@@ -297,7 +299,7 @@ save(allimgout, simConfig, template, file=file.path(dirname(simConfig$output), '
 ```{r figure1, fig.width=11, fig.height=4.5}
 sval = 0.20
 pval = 0.001
-slices = 18:44
+slices = 10:50
 
 for(sval in simConfig$cfts.s){
   for(pval in simConfig$cfts.p){
@@ -431,7 +433,7 @@ for(sval in simConfig$cfts.s){
 ```
 
 
-```{r figure3, fig.width=11, fig.height=4.5}
+```{r figure3, fig.width=11, fig.height=4.5, eval=FALSE}
 color.bar <- function(lut, min, max=-min, nticks=11, ticks=seq(min, max, len=nticks), title='') {
   scale = (length(lut)-1)/(max-min)
   plot(c(0,10), c(min,max), type='n', bty='n', xaxt='n', xlab='', yaxt='n', ylab='', main=title)
