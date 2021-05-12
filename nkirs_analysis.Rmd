@@ -1,0 +1,159 @@
+---
+title: "NKI-RS VBM analysis"
+author: "Kaidi Kang"
+date: "5/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Information about the data set
+
+
+Nathan Kline Institute Rockland Sample (NKI-RS).
+
+The images are voxel-based morphometry (VBM).
+
+## VBM images (outcome variable)
+
+
+
+## Covariates
+
+
+
+## Data setup
+
+
+```{r}
+knitr::opts_chunk$set(echo = FALSE, eval=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=10, cache=TRUE)
+path = Sys.getenv('PATH')
+path = Sys.setenv('PATH'=paste(path, '/home/rstudio/.local/bin', sep=':'))
+```
+
+
+## Setup simulations
+
+```{r simconfig, results='hide', eval=TRUE}
+# install the latest versions of the packages to perform these analyses.
+devtools::install_github('simonvandekar/pbj', ref='master')
+#devtools::install_github('statimagcoll/NIsim')
+
+### LIBRARIES ###
+library(RNifti) # Nifti I/O
+library(parallel) # mclapply
+library(splines) # ns
+library(mmand) # spatial cluster functions
+library(fslr) # imaging tools
+library(progress) # progress bar
+library(pbj) # pbj package
+library(PDQutils) # edgeworth expansion stuff
+library(NIsim) # simulation tools
+library(papayar)
+
+# number of cores for parallel things
+ncores = 16
+
+
+### LOAD IN DATA FROM DROPBOX ###
+dbimagedir = '/media/disk2/pbj/data/rockland/neuroimaging'
+maskfile = '/usr/local/fsl/data/standard/MNI152_T1_2mm_brain_mask.nii.gz'
+dbdatafile = '/media/disk2/pbj/data/rockland/demographic/RocklandBehavioral.csv'
+template = '/usr/local/fsl/data/standard/MNI152_T1_2mm_brain.nii.gz'
+
+# # creates slab mask
+# mask = readNifti(maskfile)
+# slabs = round(dim(mask)[3]/2) + -3:3
+# sum(mask[,,slabs])
+# mask[,,-slabs] = 0
+# writeNifti(mask, '/media/disk2/pbj/data/rockland/neuroimaging/MNI152_T1_2mm_brain_mask_slab.nii.gz')
+
+
+
+# load in data and get directories
+dat = read.csv(dbdatafile)
+dat$dir = file.path(dbimagedir, dat$AnonymizedID, dat$IDandSession)
+#dat$dir[which(!file.exists(dat$dir))]
+dat = dat[ file.exists(dat$dir), ]
+# some subjects have two image folders, this just grabs the first one.
+dat$files = file.path(sapply(dat$dir, function(dir) list.files(dir, pattern='*', full.names=TRUE)[1]), 'GRAY_MNORM/mwp1t1.nii.gz')
+dat$files2mm = gsub('.nii.gz', '_2mm.nii.gz', dat$files)
+dat$files2mmsm4 = gsub('.nii.gz', '_sm4.nii.gz', dat$files2mm)
+
+
+if(!all(file.exists(dat$files2mmsm4))){
+  ## CREATE DOWNSAMPLED DATA
+  invisible(mcmapply(flirt, infile=dat$files, outfile=dat$files2mm, opts = '-applyxfm', MoreArgs=list(reffile=template, retimg=FALSE), mc.cores = ncores ))
+  ## SMOOTH DOWNSAMPLED DATA
+  invisible(mcmapply(susan, file=dat$files2mm, outfile=dat$files2mmsm4, MoreArgs=list(sigma=4, dimg='3', n_usans='0'), mc.cores=ncores))
+}
+
+# view files
+# papayar::papaya(c(template, dat$files2mm[1], dat$files2mmsm4[1]))
+# set downsampled smoothed files as the main file
+#papayar::papaya(c(maskfile, dat$files2mm[1], dat$files2mmsm4[1]))
+dat$files = dat$files2mmsm4
+
+# rename some variables and do some data curation
+dat$age = dat$CalculatedAge
+dat$sex = dat$WhatIsYourSex
+dat$race = ifelse(!dat$WhatIsYourRace %in% c('White', 'Black'), 'Other', dat$WhatIsYourRace)
+dat$pdf = file.path(sapply(dat$dir, function(dir) list.files(dir, pattern='*', full.names=TRUE)[1]), 'PDF/catreport_t1.pdf')
+
+## CREATE MASK
+# if(!file.exists(maskfile)){
+#   imgs = readNifti(dat$files)
+#   mask = imgs[[1]]
+#   mask[,,] = 0
+#   imgs = apply(simplify2array(imgs), 1:3, function(v) sum(v>0))
+#   mask[sum(imgs)==nrow(dat)] = 1
+#   writeNifti(mask, file=maskfile)
+# }
+```
+
+
+## Group level analysis
+
+
+### Parametric test statistics
+```{r}
+
+lmfull = paste0(" ~ sex + race + ns(age, df=4)" )
+lmred = paste0(" ~ sex + race + age" )
+
+### SETUP THE SIMULATION ANALYSIS ###
+  # subsets dataset to all people who have the variables
+# Excludes missing data
+dat = dat[apply(!is.na(dat[ ,c(all.vars(as.formula(lmfull)))]), 1, all), ]
+
+# lmPBJ -- fits the model and computes the statistical image for the covariate of interest
+paramStatMap = lmPBJ(dat$files, form=lmfull, formred=lmred, mask=maskfile, template = template, data=dat, transform = 'none', HC3 = FALSE, zeros = TRUE)
+
+
+
+# pbjInference or pbjSEI
+statmapFile = paste0(tempfile(), '.nii.gz')
+writeNifti(stat.statMap(paramStatMap), file=statmapFile)
+papayar::papaya(c(template, statmapFile ))
+
+
+```
+
+
+### Robust test statistics
+
+
+```{r}
+# lmPBJ -- fits the model and computes the statistical image for the covariate of interest
+lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 'none', HC3 = TRUE )
+
+```
+
+# pbjInference or pbjSEI
+
+
+
+```
+
