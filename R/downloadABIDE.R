@@ -19,6 +19,14 @@ checkABIDEFile <- function(md5list, destfile, stopOnFailure = FALSE) {
   return(FALSE)
 }
 
+#' Download ABIDE data for analysis.
+#'
+#' @param md5list Undocumented arguments from Jeremy.
+#' @param url Undocumented arguments from Jeremy.
+#' @param destfile Undocumented arguments from Jeremy.
+#' @param force Undocumented arguments from Jeremy.
+#' @return Returns a file?
+#' @importFrom httr write_disk
 downloadABIDEFile <- function(md5list, url, destfile, force) {
   fetch <- force || !file.exists(destfile)
   if (!fetch && !checkABIDEFile(md5list, destfile)) {
@@ -42,6 +50,7 @@ downloadABIDEFile <- function(md5list, url, destfile, force) {
 #' @param outdir A directory to save the output files.
 #' @param force Always re-download existing files.
 #' @return Returns a data frame of ABIDE demographic data.
+#' @importFrom utils read.csv
 #' @export
 downloadABIDE <- function(outdir, force = FALSE) {
   if (!dir.exists(outdir)) {

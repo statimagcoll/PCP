@@ -6,10 +6,12 @@
 \usage{
 genSimData(
   files,
-  outfiles,
-  betaimg = NULL,
+  outfiles = NULL,
+  n4sim,
+  nMeas = NULL,
   mask = NULL,
-  method = c("bootstrap", "synthetic")
+  method = c("bootstrap", "synthetic"),
+  lambda = 0.5
 )
 }
 \arguments{
@@ -17,13 +19,15 @@ genSimData(
 
 \item{outfiles}{a vector of images to save the output.}
 
-\item{betaimg}{a parameter image that describes the association between X
-and the desired relationship images in filelist. The units of this are standardized so that it
-is like effect size. Currently, not supported.}
+\item{n4sim}{total number of measurements that we're simulating}
+
+\item{nMeas}{Approximate average number of measurements per subject.}
 
 \item{mask}{image mask where data exist.}
 
 \item{method}{Method to generate data, either "synthetic" (i.e. multivariate normal) or "bootstrap."}
+
+\item{lambda}{Simulated data are a convex coombination of normally distributed data with bootstrapped data. lambda=1 is fully bootstrapped data, lambda=0 is fully synthetic.}
 }
 \description{
 This function loads images specified in filelist and adds signal to the
