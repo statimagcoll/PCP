@@ -53,7 +53,7 @@ set.seed(555)
 
 ```{r dataSetup, eval=TRUE}
 # install the latest versions of the packages to perform these analyses.
-devtools::install_github('simonvandekar/pbj', ref='inference')
+devtools::install_github('simonvandekar/pbj', ref='master')
 #devtools::install_github('statimagcoll/NIsim')
 
 ### LIBRARIES ###
@@ -78,9 +78,9 @@ dbimagedir = '/media/disk2/pbj/data/rockland/neuroimaging'
 # maskfile = '/usr/local/fsl/data/standard/MNI152_T1_2mm_brain_mask.nii.gz'
 # new mask file (created May 12, 2021)
 maskfile = "/media/disk2/pbj/data/rockland/neuroimaging/overlap_mask_2mm.nii.gz"
-dbdatafile = '/media/disk2/pbj/data/rockland/demographic/RocklandBehavioral.csv'
-datafile = '/media/disk2/pbj/pbj_ftest/nkirs_bootstrap_results.rdata'
-templatefile = '/usr/local/fsl/data/standard/MNI152_T1_2mm_brain.nii.gz'
+#dbdatafile = '/media/disk2/pbj/data/rockland/demographic/RocklandBehavioral.csv'
+datafile = 'nkirs_bootstrap_results.rdata'
+templatefile = '~/Box Sync/templates/standard/MNI152_T1_2mm_brain.nii.gz'
 
 # # creates slab mask
 # mask = readNifti(maskfile)
