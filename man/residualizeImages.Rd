@@ -18,7 +18,7 @@ residualizeImages(
 \item{files}{Character vector of subject images to be modeled as an outcome
 variable.}
 
-\item{form}{mgcv or lm style formula.}
+\item{form}{mgcv, lm, or lmer style formula.}
 
 \item{dat}{Data frame containing covariates used by form.}
 
@@ -26,7 +26,7 @@ variable.}
 
 \item{outfiles}{Character vector of residual output images.}
 
-\item{outrds}{Character vector of RDS file to save residuals as a matrix.}
+\item{outrds}{Character vector of RDS (or rdata) file to save residuals as a matrix.}
 
 \item{mc.cores}{Argument passed to mclapply for parallel things.}
 }
@@ -35,9 +35,7 @@ No returned value. This functions saves out nifti images files after residualizi
 }
 \description{
 Residualizes the images in files to the model form and writes the output to
-outfiles optionally smoothes with sm (in mm FWHM) using susan prior to
-residualizing if smoutfiles is specified smoothed images are saved into that
-directory. Used to run simulations to assess power and type 1 error for
+outfiles. Used to run simulations to assess power and type 1 error for
 papers. This creates images that are residualized to the covariates which
 can then be bootstrapped to generate a sample where there is the potential
 for heteroskedasticity/nonexchangeability, but where the covariates are

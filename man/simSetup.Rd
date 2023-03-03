@@ -10,9 +10,8 @@ simSetup(
   outdir,
   nsim = 1000,
   ns = c(50, 100, 200, 400),
+  nMeas = 1,
   mask = NULL,
-  rs = 8,
-  betas = rep(0, length(rs)),
   ncores = parallel::detectCores()
 )
 }
@@ -27,11 +26,9 @@ simSetup(
 
 \item{ns}{Sample sizes to evaluate for each simulation. Should be less than the number of images.}
 
+\item{nMeas}{Approximate average number of measurements per subject.}
+
 \item{mask}{If performing simulations under an alternative, signal can be added to the images within the mask.}
-
-\item{rs}{vector of radii for signal spheres.}
-
-\item{betas}{vector of parameters for signal spheres. Signal is constant throughout the sphere.}
 
 \item{ncores}{number of cores for parallel commands.}
 }

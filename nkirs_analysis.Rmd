@@ -53,9 +53,8 @@ set.seed(555)
 
 ```{r dataSetup, eval=TRUE}
 # install the latest versions of the packages to perform these analyses.
-devtools::install_github('simonvandekar/pbj', ref='master')
+devtools::install_github('simonvandekar/pbj', ref='longitudinal')
 #devtools::install_github('statimagcoll/NIsim')
-
 ### LIBRARIES ###
 library(RNifti) # Nifti I/O
 library(parallel) # mclapply
@@ -68,29 +67,22 @@ library(PDQutils) # edgeworth expansion stuff
 library(papayar) # image viewer
 library(splines) # ns
 library(magrittr) # %>%
-
 # number of cores for parallel things
 ncores = 16
-
-
 ### LOAD IN DATA FROM DROPBOX ###
 dbimagedir = '/media/disk2/pbj/data/rockland/neuroimaging'
 # maskfile = '/usr/local/fsl/data/standard/MNI152_T1_2mm_brain_mask.nii.gz'
 # new mask file (created May 12, 2021)
 maskfile = "/media/disk2/pbj/data/rockland/neuroimaging/overlap_mask_2mm.nii.gz"
-#dbdatafile = '/media/disk2/pbj/data/rockland/demographic/RocklandBehavioral.csv'
-datafile = 'nkirs_bootstrap_results.rdata'
-templatefile = '~/Box Sync/templates/standard/MNI152_T1_2mm_brain.nii.gz'
-
+dbdatafile = '/media/disk2/pbj/data/rockland/demographic/RocklandBehavioral.csv'
+datafile = '/media/disk2/pbj/pbj_ftest/nkirs_bootstrap_results.rdata'
+templatefile = '/usr/local/fsl/data/standard/MNI152_T1_2mm_brain.nii.gz'
 # # creates slab mask
 # mask = readNifti(maskfile)
 # slabs = round(dim(mask)[3]/2) + -3:3
 # sum(mask[,,slabs])
 # mask[,,-slabs] = 0
 # writeNifti(mask, '/media/disk2/pbj/data/rockland/neuroimaging/MNI152_T1_2mm_brain_mask_slab.nii.gz')
-
-
-
 # load in data and get directories
 dat = read.csv(dbdatafile)
 dat$dir = file.path(dbimagedir, dat$AnonymizedID, dat$IDandSession)
@@ -100,8 +92,6 @@ dat = dat[ file.exists(dat$dir), ]
 dat$files = file.path(sapply(dat$dir, function(dir) list.files(dir, pattern='*', full.names=TRUE)[1]), 'GRAY_MNORM/mwp1t1.nii.gz')
 dat$files2mm = gsub('.nii.gz', '_2mm.nii.gz', dat$files)
 dat$files2mmsm4 = gsub('.nii.gz', '_sm8.nii.gz', dat$files2mm)
-
-
 if(!all(file.exists(dat$files2mmsm4))){
   ## CREATE DOWNSAMPLED DATA
   invisible(mcmapply(flirt, infile=dat$files, outfile=dat$files2mm, opts = '-applyxfm', MoreArgs=list(reffile=templatefile, retimg=FALSE), mc.cores = ncores ))
@@ -111,19 +101,16 @@ if(!all(file.exists(dat$files2mmsm4))){
   invisible(mcmapply(susan, file=dat$files2mm, outfile=dat$files2mmsm4, MoreArgs=list(sigma=sigma, dimg='3', n_usans='0'), mc.cores=ncores)) 
   # sigma = 8: using 8mm smoothing (?)
 }
-
 # view files
 # papayar::papaya(c(template, dat$files2mm[1], dat$files2mmsm4[1]))
 # set downsampled smoothed files as the main file
 #papayar::papaya(c(maskfile, dat$files2mm[1], dat$files2mmsm4[1]))
 dat$files = dat$files2mmsm4
-
 # rename some variables and do some data curation
 dat$age = dat$CalculatedAge
 dat$sex = dat$WhatIsYourSex
 dat$race = ifelse(!dat$WhatIsYourRace %in% c('White', 'Black'), 'Other', dat$WhatIsYourRace)
 dat$pdf = file.path(sapply(dat$dir, function(dir) list.files(dir, pattern='*', full.names=TRUE)[1]), 'PDF/catreport_t1.pdf')
-
 ## CREATE MASK
 # if(!file.exists(maskfile)){
 #   imgs = readNifti(dat$files)
@@ -133,7 +120,6 @@ dat$pdf = file.path(sapply(dat$dir, function(dir) list.files(dir, pattern='*', f
 #   mask[sum(imgs)==nrow(dat)] = 1
 #   writeNifti(mask, file=maskfile)
 # }
-
 ```
 
 
@@ -147,7 +133,6 @@ This model specification is used to test the nonlinear age by sex interaction. T
 # Testing the nonlinearity of age effect
 # lmfull = paste0(" ~ sex + race + ns(age, df=4)" )
 # lmred = paste0(" ~ sex + race + age" )
-
 # Testing the interaction between nonlinear age x sex
 lmfull = paste0(" ~ race + ns(age, df=4) * sex" )
 lmred = paste0(" ~ sex + race + ns(age, df = 4)" )
@@ -160,16 +145,13 @@ dat = dat[apply(!is.na(dat[,all.vars(as.formula(lmfull))]), 1, all), ]
 This command fits the model across the image assuming that the errors are homoskedastic, meaning that all subjects are assumed to have the same spatial covariance.
 
 ```{r}
-
 # image(paramStatMap)
 # lmPBJ -- fits the model and computes the statistical image for the covariate of interest
 paramStatMap = lmPBJ(dat$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat, transform = 'none', HC3 = TRUE, robust = FALSE)
-
 # Visualize the chi square image
 # statmapFile = paste0(tempfile(), '.nii.gz') # generate a random file name
 # writeNifti(stat.statMap(paramStatMap), file=statmapFile) # write the statistical image
 # papayar::papaya(c(template, statmapFile )) # view the statistical image
-
 ```
 
 
@@ -181,8 +163,6 @@ This model formula uses robust statistics, which does not assume the spatial cov
 # lmPBJ -- fits the model and computes the statistical image for the covariate of interest
 ## using robust test statistics (`robust = TRUE`)
 robustStatMap <- lmPBJ(dat$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat, transform = 'none', HC3 = TRUE, robust = TRUE)
-
-
 # Visualize the chi square image
 # statmapFile = paste0(tempfile(), '.nii.gz') # generate a random file name
 # writeNifti(stat.statMap(robustStatMap), file=statmapFile) # write the statistical image
@@ -203,25 +183,20 @@ cft = qchisq(0.01, df = paramStatMap$sqrtSigma$df, lower.tail = FALSE)
 mask = RNifti::readNifti(maskfile)
 # number of bootstraps (or permutations) to run
 nboot=1000
-
 # This function is used to compute local maxima and cluster extents within each bootstrap/permutation
 statistic = function(stat, rois=FALSE, mask, thr){
   c(list(maxima(stat, rois=rois)), cluster(stat, mask=mask, thr=thr, rois=rois) )
 }
-
 # run local maxima and CEI
 maximaAndCEI = function(stat, rois=FALSE, mask, thr){
   c(maxima=list(maxima(stat, rois=rois)), CEI=cluster(stat, mask=mask, thr=thr, rois=rois) )
 }
-
 maximaAndCMI = function(stat, rois=FALSE, mask, thr){
   c(maxima=list(maxima(stat, rois=rois)), CMI=cluster(stat, mask=mask, thr=thr, rois=rois, method='mass') )
 }
-
 CEIandCMI = function(stat, rois=FALSE, mask, thr){
   c(CEI=cluster(stat, mask=mask, thr=thr, rois=rois, method='extent'), CMI=cluster(stat, mask=mask, thr=thr, rois=rois, method='mass') )
 }
-
 maximaCEIandCMI = function(stat, rois=FALSE, mask, thr){
   c(maxima=list(maxima(stat, rois=rois)), CEI=cluster(stat, mask=mask, thr=thr, rois=rois, method='extent'), CMI=cluster(stat, mask=mask, thr=thr, rois=rois, method='mass') )
 }
@@ -233,7 +208,6 @@ maximaCEIandCMI = function(stat, rois=FALSE, mask, thr){
 ```{r}
   ## wild bootstraps with rademacher
   param.wild.time = system.time(invisible(capture.output(pbjinf.param.wild <- pbjInference(paramStatMap, statistic = statistic, nboot = nboot, runMode = 'cdf', method='wild', mask = paramStatMap$mask, thr = cft))))
-
 ## permutations
   param.permu.time = system.time(invisible(capture.output(pbjinf.param.permu <- pbjInference(paramStatMap, statistic = statistic, nboot = nboot, runMode = 'cdf', method='permutation', mask = paramStatMap$mask, thr = cft) )))
 ```
@@ -245,10 +219,8 @@ globCDF -> adjusted p-value
 ```{r}
 ## wild bootstraps with rademacher
 robust.wild.time = system.time(invisible(capture.output(pbjinf.robust.wild <- pbjInference(robustStatMap, statistic = statistic, nboot = nboot, runMode = 'cdf', method='wild', mask = robustStatMap$mask, thr = cft))))
-
 ## permutations
 robust.permu.time = system.time(invisible(capture.output(pbjinf.robust.permu <- pbjInference(robustStatMap, statistic = statistic, nboot = nboot, runMode = 'cdf', method='permutation', mask = robustStatMap$mask, thr = cft) )))
-
 #save.image(datafile)
 ```
 
@@ -265,7 +237,6 @@ Param.Table = data.frame('Cluster Extent' = c(pbjinf.param.wild$obsStat[[2]]),
                          'FWER p-value - boot' = (1-pbjinf.param.wild$globCDF[[2]](c(pbjinf.param.wild$obsStat[[2]]))),
                          'FWER p-value - perm' = (1-pbjinf.param.permu$globCDF[[2]](c(pbjinf.param.permu$obsStat[[2]]))),
                          check.names=FALSE )
-
 knitr::kable(Param.Table[order(Param.Table$`Cluster Extent`, decreasing = TRUE),][1:10,], row.names = FALSE,
              digits=3, booktabs=T)
 print(knitr::kable(Param.Table[order(Param.Table$`Cluster Extent`, decreasing = TRUE),][1:10,], format = 'latex', row.names = FALSE,
@@ -284,7 +255,6 @@ Robust.Table = data.frame('Cluster Extent' = c(pbjinf.robust.wild$obsStat[[2]]),
                          'FWER p-value - boot' = (1-pbjinf.robust.wild$globCDF[[2]](c(pbjinf.robust.wild$obsStat[[2]]))), 
                          'FWER p-value - perm' = (1-pbjinf.robust.permu$globCDF[[2]](c(pbjinf.robust.permu$obsStat[[2]]))),
                          check.names=FALSE )
-
 knitr::kable(Robust.Table[order(Robust.Table$`Cluster Extent`, decreasing = TRUE),][1:10,], row.names = FALSE,
              digits=3, booktabs=T)
 print(knitr::kable(Robust.Table[order(Robust.Table$`Cluster Extent`, decreasing = TRUE),][1:10,], format = 'latex', row.names = FALSE,
@@ -300,7 +270,6 @@ print(knitr::kable(Robust.Table[order(Robust.Table$`Cluster Extent`, decreasing 
 template = readNifti(templatefile)
 # PARAMETIC STATISTICS
 displayParamBoot <- displayParamPerm <- stat.statMap(paramStatMap)
-
 # 1. (wild) bootstrap parametric statistic using cluster extent inference
   # get the FWER-adjusted p-values
   pvals = round(-log10( 1 - pbjinf.param.wild$globCDF[[2]](c(pbjinf.param.wild$obsStat[[2]]) ) + 0.0001), 3)
@@ -321,10 +290,8 @@ displayParamBoot <- displayParamPerm <- stat.statMap(paramStatMap)
   # bootstrap parametric statistic using cluster extent inference
   # This thresholds the unadjusted chi-square statistical image by the adjusted p-value for the cluster
   displayParamPerm[ pvalimg< (-log10(0.05)) ] = 0
-
 # ROBUST STATISTICS
 displayRobustBoot <- displayRobustPerm <- stat.statMap(robustStatMap) 
-
 # 1. (wild) bootstrap robust statistic using cluster extent inference
   # get the FWER-adjusted p-values
   pvals = -log10( 1 - pbjinf.robust.wild$globCDF[[2]](c(pbjinf.robust.wild$obsStat[[2]]) ) + 0.0001) %>% round(3)
@@ -367,19 +334,15 @@ color.bar <- function(lut, min, max=-min, nticks=11, ticks=seq(min, max, len=nti
     rect(0,y,10,y+1/scale, col=lut[i], border=NA)
   }
 }
-
 # choose upper threshold that looks good
 threshs = c(-log10(0.01), 26)
-
 # display figure "figures for evidence"
 # slices that have the mask in them
 # which(!apply(mask==0, 3, all))
 # a manually selected subset of that
 slices = 10:60
-
 # create this directory
 outputdir = '/media/disk2/pbj/pbj_ftest/nkirs_images'
-
 for (slice in slices){
   fname = file.path(outputdir, 'images', paste0('slice', slice, '.png') )
   dir.create(dirname(fname), showWarnings = FALSE, recursive = TRUE)
@@ -419,7 +382,6 @@ for (slice in slices){
 
 
 ```{r, height=4.5, width=2.5, eval=TRUE}
-
 plotResults = function(statMap, pbjObj,  emForm=NULL, roiInds=NULL, ind=1, data=NULL){
   rois = pbjObj$ROIs
   obsstat = pbjObj$obsStat
@@ -457,7 +419,6 @@ plotResults = function(statMap, pbjObj,  emForm=NULL, roiInds=NULL, ind=1, data=
   for(roiInd in roiInds){
     data$y = sapply(imgs, function(img) mean(img[ rois==roiInd]) )
     slice = mean(which(rois==roiInd, arr.ind = TRUE)[,3])
-
     fullModel = lm(update.formula(full, y ~ .), data=data)
     #redModel = lm(update.formula(red, y ~ .), data=data)
     # reproduces stat image using the maxima
@@ -487,8 +448,5 @@ plotResults = function(statMap, pbjObj,  emForm=NULL, roiInds=NULL, ind=1, data=
     } )
   }
 }
-
 plotResults(robustStatMap, ind = 2, pbjObj = pbjinf.robust.wild, emForm= ~ age | sex, data=dat, roiInds = 1:5)
-
 ```
-

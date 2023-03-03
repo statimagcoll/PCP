@@ -7,9 +7,8 @@
 #' @param outdir A directory to save the output files that are used for the simulations.
 #' @param nsim Number of simulations to setup for each sample size.
 #' @param ns Sample sizes to evaluate for each simulation. Should be less than the number of images.
+#' @param nMeas Approximate average number of measurements per subject.
 #' @param mask If performing simulations under an alternative, signal can be added to the images within the mask.
-#' @param rs vector of radii for signal spheres.
-#' @param betas vector of parameters for signal spheres. Signal is constant throughout the sphere.
 #' @param ncores number of cores for parallel commands.
 #' @return Returns a data frame of directories where simulation setup files are stored. The rds file in each directory saves the data frame and the image locations in the variable "images".
 #' @importFrom RNifti readNifti writeNifti
@@ -17,20 +16,17 @@
 #' @export
 # prepare the output directories
 # All the randomization happens within this loop
-simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mask=NULL, rs=8, betas=rep(0, length(rs)), ncores=parallel::detectCores() ){
-  sims = expand.grid(sim=1:nsim, n=ns, simdir=NA)
+simSetup = function(images, data, outdir, nsim=1000, ns=c(50, 100, 200, 400), nMeas=1, mask=NULL, ncores=parallel::detectCores() ){
+  sims = expand.grid(sim=1:nsim, n=ns, nMeas=nMeas, simdir=NA)
   data$images = images
-  if(any(betas!=0) & is.null(mask)) stop('mask must be provided if simulating under an alternative.')
   sims$simdir = do.call(c, pbmcapply::pbmclapply(1:nrow(sims), function(simind) {
-    simdir = file.path(outdir, paste0('sim', sims[simind,'sim']), paste0('n', sims[simind,'n']) )
+    simdir = file.path(outdir, paste0('sim', sims[simind,'sim']), paste0('n', sims[simind,'n'], 'nMeas', sims[simind,'nMeas']) )
     n = sims[simind, 'n']
     dir.create(simdir, showWarnings=FALSE, recursive = TRUE)
     unlink(file.path(simdir, '*.nii.gz'), recursive=TRUE)
-    # create a sphere where there is signal within the gray matter
-    # mask it with the (gray matter) mask.
-    if(any(betas!=0)) parameterImage(mask, parameterImage = file.path(outdir, 'signal.nii.gz'), rs, betas)
     # create random sample from demographics and roi data
-    tempdata = data[sample.int(nrow(data), n, replace=TRUE), ]
+    N4sim = round(n * nMeas)
+    tempdata = data[sample.int(nrow(data), N4sim, replace=TRUE), ]
     saveRDS(tempdata, file=file.path(simdir,'data.rds' ) )
     simdir
   }, mc.cores = ncores) )
@@ -83,6 +79,8 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
   #' The spheres are masked by the mask image so that no parameter values exist outside the mask.
   #' @param simdirs Vector of simulation directories created by simSetup.
   #' @param sims Vector of integers specifying simulation index. Does not have to be unique. Can be used for running a particular analysis in every kth simulation.
+  #' @param n Integer sample size.
+  #' @param nMeas Numeric number of measurments per subject.
   #' @param simfunc Function to evaluate on the simulated data.
   #' @param simfuncArgs List of arguments passed to simfunc.
   #' @param mask mask image argument passed to genSimData. Only required for genSimData function if betaimg is not NULL or if method='synthetic'
@@ -96,25 +94,21 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
   #' @importFrom pbapply pblapply
   #' @importFrom pbj addSignal
   #' @export
-  runSim = function(simdirs, sims, simfunc, simfuncArgs=NULL, mask=NULL, method=c('bootstrap', 'synthetic'), syntheticSqrt, ncores=parallel::detectCores(), ...){
+  runSim = function(simdirs, sims, n, nMeas, simfunc, simfuncArgs=NULL, mask=NULL, method=c('bootstrap', 'synthetic'), syntheticSqrt, ncores=parallel::detectCores(), ...){
     method = tolower(method)
-    result = if(ncores>1){
-      pbmcapply::pbmcmapply(function(simdir, sim, simfunc, method, mask){
+    # simdir = simdirs[1]; sim = sims[1]; nMeas=nMeas[1]; n = n[1]
+    result = pbmcapply::pbmcmapply(function(simdir, sim, n, nMeas, simfunc, method, mask){
       # load data
       dat = readRDS(file.path(simdir, 'data.rds'))
 
-      # load effect size file if it exists
-      sigfile = file.path(dirname(simdir), 'signal.nii.gz')
-      sigfile = if(file.exists(sigfile)) sigfile else NULL
       # create names for temporary files
       dat$tmpfiles = tempfile(paste0(basename(dirname(simdir)), '/s', 1:nrow(dat)), fileext='.nii.gz')
       dir.create(dirname(dat$tmpfiles[1]), recursive=TRUE, showWarnings = FALSE)
       if(method=='bootstrap'){
-        genSimData(files=dat$images, outfiles=dat$tmpfiles, betaimg=sigfile, mask=mask, method=method)
+        genSimData(files=dat$images, outfiles=dat$tmpfiles, mask=mask, method=method)
       } else {
-        genSimData(files=syntheticSqrt, outfiles=dat$tmpfiles, betaimg=sigfile, mask=mask, method=method)
+        dat$id = factor(genSimData(files=syntheticSqrt, outfiles=dat$tmpfiles, mask=mask, method=method, n4sim=n, nMeas=nMeas)$id)
       }
-      # adds artificial signal to images
       dat$images = dat$tmpfiles
 
       simfuncArgs$sim = sim
@@ -122,29 +116,7 @@ simSetup = function(images, data, outdir, nsim=1000, ns=c(50,100, 200, 400), mas
       result = do.call(simfunc, args = simfuncArgs)
       unlink(dat$images)
       return(result)
-    }, simdir=simdirs, sim=sims, MoreArgs=list(simfunc = simfunc, method = method, mask=mask), mc.cores = ncores, ...)
-    } else {
-      pbapply::pbmapply(function(simdir, sims, simfunc, method, mask){
-        # load data
-        dat = readRDS(file.path(simdir, 'data.rds'))
-
-        # load effect size file if it exists
-        sigfile = file.path(dirname(simdir), 'signal.nii.gz')
-        sigfile = if(file.exists(sigfile)) sigfile else NULL
-        # create names for temporary files
-        dat$tmpfiles = tempfile(paste0(basename(dirname(simdir)), '/s', 1:nrow(dat)), fileext='.nii.gz')
-        dir.create(dirname(dat$tmpfiles[1]), recursive=TRUE, showWarnings = FALSE)
-        genSimData(files=dat$images, outfiles=dat$tmpfiles, betaimg=sigfile, mask=mask, method=method)
-        # adds artificial signal to images
-        dat$images = dat$tmpfiles
-
-        simfuncArgs$sim = sim
-        simfuncArgs$data = dat
-        result = do.call(simfunc, args = simfuncArgs)
-        unlink(dat$images)
-        return(result)
-      }, simdir=simdirs, sim=sims, MoreArgs=list(simfunc = simfunc, method = method, mask=mask ))
-    }
+    }, simdir=simdirs, sim=sims, n=n, nMeas=nMeas, MoreArgs=list(simfunc = simfunc, method = method, mask=mask), mc.cores = ncores, ...)
     return(result)
   }
 
