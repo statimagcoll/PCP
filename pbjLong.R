@@ -1,0 +1,733 @@
+## ----setup, include=FALSE, cache=FALSE----------------------------------------
+knitr::opts_chunk$set(echo = FALSE, eval=TRUE, message=FALSE, warning=FALSE, fig.width=8, fig.height=10, cache=FALSE, dev = 'pdf')
+path = Sys.getenv('PATH')
+path = Sys.setenv('PATH'=paste(path, '/home/rstudio/.local/bin', sep=':'))
+
+
+## ----simconfig, results='hide', eval=TRUE, results='asis', fig.height=1.5, fig.width=7.5----
+# install the latest versions of the packages to perform these analyses.
+devtools::install_github('simonvandekar/pbj', ref='longitudinal')
+devtools::install_github('statimagcoll/NIsim')
+### LIBRARIES ###
+library(RNifti) # Nifti I/O
+library(parallel) # mclapply
+library(splines) # ns
+library(mmand) # spatial cluster functions
+library(fslr) # imaging tools
+library(progress) # progress bar
+library(pbj) # pbj package
+library(PDQutils) # edgeworth expansion stuff
+library(NIsim) # simulation tools
+library(papayar)
+library(lubridate)
+
+# number of cores for parallel things
+ncores = 24
+
+
+### LOAD IN DATA FROM DROPBOX ###
+dbimagedir = '/media/disk2/pbj/data/heckers_fep/neuroimaging'
+maskfile = '/usr/local/fsl/data/standard/MNI152_T1_2mm_brain_mask.nii.gz'
+#maskfile = '/media/disk2/pbj/data/rockland/neuroimaging/MNI152_T1_2mm_brain_mask_slab.nii.gz'
+overlapmaskfile = file.path(dbimagedir, 'overlap_mask_2mm.nii.gz')
+#maskfile = '/media/disk2/pbj/data/rockland/neuroimaging/MNI152_T1_2mm_brain_mask_1vox.nii.gz'
+dbdatafile = '/media/disk2/pbj/data/heckers_fep/demographic/alff_subject_info_final_allusabledata_Simon.csv'
+template = '/usr/local/fsl/data/standard/MNI152_T1_2mm_brain.nii.gz'
+
+ # creates slab mask
+mask = readNifti(maskfile)
+slabs = round(dim(mask)[3]/2) + -5:5
+sum(mask[,,slabs])
+mask[,,-slabs] = 0
+slabmaskfile = '/media/disk2/pbj/data/rockland/neuroimaging/MNI152_T1_2mm_brain_mask_slab.nii.gz'
+writeNifti(mask, slabmaskfile)
+maskfile = slabmaskfile
+
+# load in data and get directories
+dat = read.csv(dbdatafile, na.strings = c('NA', ''))
+dat=dat[!rowSums(is.na(dat))==ncol(dat),]
+long = grep('longitudinal_2yr.', names(dat), value=TRUE)
+baseline = gsub('longitudinal_2yr', 'baseline', long)
+baseline = baseline[baseline %in% names(dat)]
+long = gsub( 'baseline','longitudinal_2yr', baseline)
+# reshape to long format
+dat = reshape(dat, varying=cbind(baseline, long), direction='long', idvar='subjectID', ids=dat$XNAT.Subject.ID, times=c('baseline', 'tp2'), drop=names(dat)[which(!names(dat) %in% c(baseline, long, 'DOB', 'Race', 'Sex', 'Group'))], v.names=gsub('baseline.', '', baseline) )
+
+dat$dir = file.path(dbimagedir, dat$subjectID, dat$XNAT.Session.ID)
+#dat$dir[which(!file.exists(dat$dir))]
+dat = dat[ file.exists(dat$dir), ]
+# some subjects have two image folders, this just grabs the first one.
+dat$files = file.path(sapply(dat$dir, function(dir) list.files(dir, pattern='*', full.names=TRUE)[1]), 'FILTERED_KEEPGM_MNI/s4filtered_keepgm_noscrub_wadfmri_fALFF_norm.nii')
+
+# rename some variables and do some data curation
+dat$age = (mdy(dat$MRI.date) - mdy(dat$DOB))/365.25
+colnames(dat) = tolower(colnames(dat))
+
+
+## ----visualQA, eval=FALSE-----------------------------------------------------
+## # view files
+## #papayar::papaya(c(slabmaskfile, dat$files[1], gsub('s4', '', dat$files[1]) ))
+## # View all sagittal slices
+## par(mfrow=c(1,6), mar=c(0,0,2,0), oma=c(0,0,0,0))
+## invisible(capture.output(lapply(1:nrow(dat), function(ind){ image(readNifti(dat$files[ind]), plane='sagittal', index=c(45), thresh = 0.2, main=dat$subjectID[ind])}) ))
+
+
+## ----simulationParameters, eval=TRUE------------------------------------------
+### SIMULATION PARAMETERS ###
+simConfig = list(
+  # vector of sample sizes to simulate
+  ns = c(25, 50, 100, 200),
+  # number of simulations to run
+  nsim=100,
+  # number of bootstraps
+  nboot = 500,
+  # cluster forming thresholds
+  cfts.s = c(0.1, 0.25, 0.4),
+  cfts.p = c(0.01, 0.001),
+  
+  # radius for spheres of signal.
+  rs=c(8),
+  
+  #### MODEL FORMULAS FOR SIMULATIONS ####
+  # uses linear mixed effects model for simulations
+  formres = paste0(" ~ sex + group*time + ns(age, df=10) + (1|subjectid)" ),
+  # need age_at_scan in both models for testing nonlinear functions
+  form = paste0(" ~ ns(age, df=3) + group + time" ),
+  formred1 = paste0(" ~ group + time"),
+  formred2 = paste0(" ~ ns(age, df=3) + time"),
+  formred3 = paste0(" ~ ns(age, df=3) + group"),
+  id='subjectid',
+  #  weights for each subject. Can be a character vector
+  W = NULL,
+  # where to put residuals
+  resdir = 'resid',
+  # where to output results
+  simdir = '/media/disk2/temp',
+  dat = dat,
+  mask = maskfile,
+  output = '/media/disk2/pbj/pbjLongitudinal/simulation_results.rdata',
+  ncores = 10,
+  method='synthetic',
+  syntheticSqrt= '/media/disk2/pbj/pbj_ftest/sqrtMat.rds'
+)
+dat = dat[!apply(is.na(dat[,c('sex', 'age', 'race', 'group', 'time') ]), 1, any ), ]
+
+# tests the age effect
+simConfig$formred = simConfig$formred1
+
+#knitr::kable(as.data.frame(table1::table1(~ sex + age + race + time | group, data=dat)), format = 'latex')
+
+
+## ----simulationFunctions, eval=TRUE-------------------------------------------
+# simfunc should contain a data argument, which is defined within runSim
+# Other arguments are identical across simulation runs.
+simFunc = function(lmfull, lmred, mask, data, nboot, cfts.s=NULL, cfts.p=NULL, sim){
+  # generate fake covariates
+  data$fake_group = factor(ceiling(ppoints(nrow(data))*4 ) )
+  data$fake_covariate1 = ppoints(nrow(data))
+  data$fake_covariate2 = rnorm(nrow(data))
+
+  # methods to try to make stats map more normal
+  invisible(capture.output(HC3RobustStatmap <- lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't', HC3 = TRUE, id = data$id )))
+  # t transform, classical, estimate covariance
+  #invisible(capture.output(tStatmap <- lmPBJ(data$images, form=lmfull, formred=lmred, mask=mask, data=data, transform = 't', robust=FALSE, HC3=TRUE, id=data$id)))
+  
+  # Runs pTFCE, currently errors
+  #RobustpTFCE = ptfce.statmap(HC3RobustStatmap)
+  
+
+  
+  statmaps = c('HC3RobustStatmap')
+  out = list()
+  
+  # if both are passed, only p-value thresholding is performed
+  if(!is.null(cfts.p)){
+    thrs = qchisq(cfts.p, df = HC3RobustStatmap$sqrtSigma$df, lower.tail = FALSE)
+  } else if(!is.null(cfts.s)){
+    thrs = (cfts.s^2*HC3RobustStatmap$sqrtSigma$n) + tRobustStatmap$sqrtSigma$df
+  } else{
+    stop('cfts.p or cfts.s must be specified.')
+  }
+  
+  
+  # Apply each of the sampling methods
+  for(statmapname in statmaps){
+    ### BOOTSTRAP METHODS
+    statmap = get(statmapname)
+    if(statmapname %in% c('HC3RobustStatmap')){
+      pbjRadT <- pbjInference(statmap, nboot = nboot, method='wild', cft = thrs, mask=statmap$mask, runMode='bootstrap', max=TRUE, CMI=TRUE)$pbj
+      #pbjRadT$obsStat$tfce = c(maxZ = max(RobustpTFCE$Z), p05Thr = RobustpTFCE$fwer0.05.Z)
+      #invisible(capture.output(pbjNormT <- pbjInference(statmap, nboot = nboot, rboot = function(n){ rnorm(n)}, method='wild', cft = thrs, mask=statmap$mask, runMode='bootstrap', max=TRUE, CMI=TRUE)$pbj))
+      invisible(capture.output(pbjPermT <- pbjInference(statmap, nboot = nboot, method='permutation', cft = thrs, mask=statmap$mask, runMode='bootstrap', max=TRUE, CMI=TRUE)$pbj))
+      #pbjPermT$obsStat$tfce = c(maxZ = max(RobustpTFCE$Z), p05Thr = RobustpTFCE$fwer0.05.Z)
+      #pbjNonparametric = pbjInference(statmap, nboot = nboot, method='nonparametric', thr = thrs, mask=statmap$mask, statistic=simStats)
+    }
+    
+    #  if(statmapname %in% c('tStatmap')){
+    #   invisible(capture.output(pbjRadT <- pbjInference(statmap, nboot = nboot, method='wild', cft = thrs, mask=statmap$mask, runMode='bootstrap', max=TRUE, CMI=TRUE)$pbj ))
+    #    pbjRadT$obsStat$tfce = c(maxZ = max(TpTFCE$Z), p05Thr = TpTFCE$fwer0.05.Z)
+    #   invisible(capture.output(pbjNormT <- pbjInference(statmap, nboot = nboot, rboot = function(n){ rnorm(n)}, method='wild', cft = thrs, mask=statmap$mask, runMode='bootstrap', max=TRUE, CMI=TRUE)$pbj ))
+    #   pbjNormT$obsStat$tfce = c(maxZ = max(TpTFCE$Z), p05Thr = TpTFCE$fwer0.05.Z)
+    #   invisible(capture.output(pbjPermT <- pbjInference(statmap, nboot = nboot, method='permutation', cft = thrs, mask=statmap$mask, runMode='bootstrap', max=TRUE, CMI=TRUE)$pbj ))
+    #   pbjPermT$obsStat$tfce = c(maxZ = max(TpTFCE$Z), p05Thr = TpTFCE$fwer0.05.Z)
+    #   #pbjNonparametric = pbjInference(statmap, nboot = nboot, method='nonparametric', statistic=simStats, thr = thrs, mask=statmap$mask)
+    # }
+    # collect output
+    PBJnames = grep('^pbj', ls(), value=TRUE)
+    allnames = paste(statmapname, PBJnames, sep='_')
+    out[allnames] = lapply(PBJnames, get, pos = environment())
+    rm(list=PBJnames)
+
+  }
+  gc()
+  return(out)
+}
+
+#debug(pbjInference)
+#simConfig = get("fakeGroupSimConfig")
+#simtime = system.time(test <- simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS("/media/disk2/temp/sim1/n100/data.rds"), sim = 1, 2, cfts.p = simConfig$cfts.p))
+#stop('not an error.')
+# simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$simdir, nsim=simConfig$nsim, ns=simConfig$ns, nMeas=2, mask=simConfig$mask )
+# testData = readRDS("/media/disk2/temp/sim1/n100nMeas2/data.rds")
+# testData$id = rep(1:(nrow(testData)/2), 2)
+# test <- simFunc(simConfig$form, simConfig$formred, simConfig$mask, testData, sim = 1, nboot=2, cfts.p = simConfig$cfts.p)
+
+
+## ----runSims------------------------------------------------------------------
+  ### SETUP THE SIMULATION ANALYSIS ###
+  # subsets dataset to all people who have the variables
+  simConfig$dat = simConfig$dat[apply(!is.na(simConfig$dat[ ,c(all.vars(as.formula(simConfig$formres)), simConfig$W)]), 1, all), ]
+  # Create residualized images
+  if(class(simConfig$formres)=='formula' | is.character(simConfig$formres)){
+    simConfig$dat$rfiles = file.path(dirname(simConfig$dat$files), '..', simConfig$resdir, basename(simConfig$dat$files))
+    # remake these files each time
+    unlink(simConfig$dat$rfiles)
+    if(!all(file.exists(simConfig$dat$rfiles))){
+      rdsFile = residualizeImages(files=simConfig$dat$files, dat=simConfig$dat, mask=simConfig$mask, form=as.formula(simConfig$formres), mc.cores=simConfig$ncores, outrds=simConfig$syntheticSqrt)
+    }
+    gc()
+  }
+  
+  simdirs = simSetup(simConfig$dat$files, data=simConfig$dat, outdir=simConfig$simdir, nsim=simConfig$nsim, ns=simConfig$ns, nMeas=2, mask=simConfig$mask )
+  gc()
+  
+  
+  #time = system.time(test <- simFunc(simConfig$form, simConfig$formred, simConfig$mask, readRDS(file.path(simdirs$simdir[10], 'data.rds')), simConfig$nboot, simConfig$cfts.s) )
+  
+  # mix this up so that large sample simulations aren't all dropped on one "thread".
+  simdirs = simdirs[sample(1:nrow(simdirs)),]
+  
+  # check failed simulations
+  if(file.exists(simConfig$output)){
+    load(simConfig$output)
+    if(length(dim(results))<=1){
+      failedSims = sapply(results, length)<=1
+      failedSims = names(failedSims)[failedSims]
+      simSet = simdirs[ simdirs$simdir %in% failedSims,]
+      
+      rerunResults = runSim(simSet$simdir, method=simConfig$method,
+                   simfunc = simFunc, mask = simConfig$mask, sims = simSet$sim,
+                   simfuncArgs = list(
+                     lmfull= simConfig$form,
+                     lmred = simConfig$formred,
+                     mask = simConfig$mask, nboot=simConfig$nboot, cfts.p=simConfig$cfts.p), ncores = simConfig$ncores, syntheticSqrt = simConfig$syntheticSqrt)
+      rerunResults = unlist(apply(rerunResults, 2, list), recursive=FALSE)
+      results[failedSims] = rerunResults
+    }
+  } else {
+    failedSims = NULL
+    # for debugging
+    # simdir = simdirs[1]; sim = sims[1]; nMeas=nMeas[1]; n = n[1]
+    results = runSim(simdirs$simdir, method=simConfig$method,
+                   simfunc = simFunc, mask = simConfig$mask, sims = simdirs$sim, n=simdirs$n, nMeas=simdirs$nMeas,
+                   simfuncArgs = list(
+                     lmfull= simConfig$form,
+                     lmred = simConfig$formred,
+                     mask = simConfig$mask, nboot=simConfig$nboot, cfts.p=simConfig$cfts.p), ncores = simConfig$ncores, syntheticSqrt = simConfig$syntheticSqrt)
+  }
+  
+  
+  dir.create(dirname(simConfig$output), showWarnings = FALSE, recursive = TRUE)
+  # clean up files
+  save.image(file=simConfig$output)
+  unlink(list.files(tempdir(), full.names = TRUE))
+  gc()
+  unlink(simdirs)
+stop('not an error. Finished simulations.')
+
+
+## ---- eval=TRUE---------------------------------------------------------------
+
+# lis A list of numeric vectors. Length of list is equal to number of bootstraps or number of simulations. Each element of the list is a vector of cluster sizes or local maxima within that simulation.
+# probs probabilities for quantiles 
+quantileMarg = function(lis, probs=c(0.95, 0.99), na.rm=TRUE){ 
+  nclusts = sapply(lis, function(y) sum(!is.na(y)))
+  if(length(nclusts)!=0){
+  ans = Hmisc::wtd.quantile(unlist(lis), weights = rep(1/nclusts, nclusts), probs=probs, na.rm=na.rm)
+  } else {
+    ans = quantile(NA, probs=probs, na.rm=TRUE)
+  }
+  ans
+}
+
+
+KL = function(lis1, lis2, np=100, na.rm=TRUE){ 
+  nclusts1 = sapply(lis1, function(y) sum(!is.na(y)))
+  nclusts2 = sapply(lis2, function(y) sum(!is.na(y)))
+  rang = range(unlist(c(lis1, lis2)), na.rm=TRUE, finite=TRUE)
+  ev = locfit::lfgrid(np, rang[1], rang[2])
+  if(length(nclusts1)!=0){
+    l1NAs = is.na(unlist(lis1)) | is.infinite(unlist(lis1))
+    l2NAs = is.na(unlist(lis2)) | is.infinite(unlist(lis2))
+    ans = locfit::density.lf(unlist(lis1)[!l1NAs], n = 100, weights=rep(1/nclusts1, nclusts1)[!l1NAs], ev = ev)
+    ans2 = locfit::density.lf(unlist(lis2)[!l2NAs], n = 100, weights=rep(1/nclusts2, nclusts2)[!l2NAs], ev = ev)
+    zeros = ans$y!=0 & ans2$y!=0
+    # trapezoidal rule to approximate integral
+    ans2$y[zeros] = ans2$y[zeros]/sum(ans2$y[zeros])
+    ans$y[zeros] = ans$y[zeros]/sum(ans$y[zeros])
+    ans = sum(ans2$y[zeros]*log(ans2$y[zeros]/ans$y[zeros]))
+  } else {
+    ans = NA
+  }
+  ans
+}
+
+cdfMarg = function(lis, tstat, na.rm=TRUE){ 
+  nclusts = sapply(lis, function(y) sum(!is.na(y)))
+  if(length(tstat)==0) tstat = 0
+  if(sum(nclusts)==0){
+    ans = rep(NA, length(tstat))
+    } else {
+     # if(length(rep(rep(1/nclusts, nclusts))) != length(unlist(lis))){
+     #   browser()
+     # }
+      #tryCatch({
+  ans = colSums(matrix(rep(rep(1/nclusts, nclusts), length(tstat)), ncol=length(tstat)) * outer(unlist(lis), tstat, '>=' ), na.rm=TRUE)/length(lis)
+  # },
+  # error = function(e){ recover()})
+    }
+  ans
+}
+
+
+
+# Creates plots for figures:
+# First loop through methods to get plot data.
+# Then plot type 1 error rates for all the local methods.
+# Then plot type 1 error rates for all the global methods.
+# Then plot KL divergence for all the local methods.
+plotData = function(rdata, alpha=0.1, stats=NULL){
+  load(rdata)
+  
+  plotDFs = list()
+  qDFs = list()
+  klDFs = list()
+  tfce = list()
+  # This is what should happen if nothing fails. If things fail it will still try to plot the results
+  if(length(dim(results))>1){
+    results = unlist(apply(results, 2, list), recursive=FALSE)
+  }
+  simdirs$results = results# lapply(results, simplify2array)
+  methods = names(simdirs$results[[2]])
+  if(is.null(stats)){
+    stats = c("Maxima", paste('Extent; cft =', simConfig$cfts.p), paste('Mass; cft =', simConfig$cfts.p) )
+  }
+  
+  for(method in methods){
+    methodname = paste(ifelse(grepl('^tStatmap', method), 'Parametric', 'Robust'), ifelse(grepl('Norm', method), 'Normal bootstrap', ifelse(grepl('Rad', method), 'Rademacher bootstrap', 'Permutation') ) , sep="; ")
+    obsStat = do.call(rbind, lapply(simdirs$results, function(y) if(is.null(y)) NA else y[[method]][['obsStat']] ) )
+    colnames(obsStat) = stats
+    # These colnames were sample size dependent
+    maximas = as.data.frame(matrix(unlist(apply(obsStat, 2, function(x) lapply(x, max))), nrow=nrow(obsStat)))
+    names(maximas) = paste('Global', stats)
+    gtfce = which(names(maximas)=='Global pTFCE')
+    if(length(gtfce)==1){
+      maximas[, 'Global pTFCE'] = sapply(obsStat[, 'pTFCE'], function(x) x[1])^2
+    }
+    # add global maximums to list of statistics
+    obsStat = cbind(obsStat, maximas)
+    
+    
+    # Arrange each bootstrap like the obsStat setup
+    simdirs$boots = lapply(simdirs$results, function(y) do.call(rbind, lapply(y[[method]][['boots']], function(z0) simplify2array(z0) ) ) )
+    simdirs$boots = lapply(simdirs$boots, function(boot){
+      # as written, TFCE needs to be the last statistic
+      if(stats[length(stats)]=='pTFCE'){
+        boot = cbind(boot, sapply(boot[, 'maxima'], max))
+      }
+      colnames(boot) = stats
+      maximas = as.data.frame(matrix(unlist(apply(boot, 2, function(x) lapply(x, function(y) max(c(y,0)))) ), nrow=nrow(boot)))
+      names(maximas) = paste('Global', stats)
+      boot = cbind(boot, maximas)
+    })
+    #length.out=pmin(simConfig$nsim, simConfig$nboot)
+    
+    # for(cftInd in 1:ncol(obsStat)){
+    #   #cat(cftInd, '\n')
+    #   colname = colnames(obsStat)[cftInd]
+    #   kldf = do.call(rbind, lapply(split(cbind(simdirs, obsStat[colname]), simdirs$n), function(df){
+    #     #cat(df$n[1], '\n')
+    #     KLs = sapply(df$boots, function(x){KL(x[,colname], df[[colname]], np = 100) } )
+    #     ans = data.frame(n=df$n[1], KL=KLs)
+    #     ans
+    #   }) )
+    #   #cat('\n')
+    #   colnames(kldf)[2] = method
+    #   if(method == methods[1]){
+    #     klDFs[[colname]] = kldf
+    #   } else {
+    #     klDFs[[colname]] = cbind(klDFs[[colname]], kldf[,2])
+    #   }
+    # }
+    
+    tfceOut = sapply(split(obsStat$pTFCE, simdirs$n), function(x) mean(sapply(x, function(y){y[1]>y[2]})) )
+    tfceOut = data.frame(n=names(tfceOut), 'Error'=tfceOut)
+    tfce[[method]] = tfceOut
+ 
+    xaxlab = c(0.75, 0.9, 0.95, 0.99)
+    for(cftInd in 1:ncol(obsStat)){
+      colname = colnames(obsStat)[cftInd]
+      adjustMethod = if(grepl('Global', colname)) 'none' else 'BH'
+      
+      cat(colname)
+      plotData = do.call(rbind, lapply(split(cbind(simdirs, obsStat[colname]), simdirs$n), function(df){
+        
+        pvalues = mapply(cdfMarg, lapply(df$boots, function(x) x[,colname]), df[,colname] )
+        minPvalues = sapply(pvalues, function(pvalue) min(p.adjust(pvalue, method=adjustMethod), na.rm=TRUE))
+        #ylims = range(quantiles, na.rm=TRUE )
+        x = 1-xaxlab
+        y = colMeans(outer(minPvalues, x, '<='), na.rm=TRUE)
+        out = data.frame(x=x, y=y, n=df$n[1])
+      }) )
+      names(plotData)[2] = method
+      # put the output into the variable colname
+      if(method == methods[1]){
+        plotDFs[[colname]] = plotData
+      } else {
+        plotDFs[[colname]] = merge(plotDFs[[colname]], plotData)
+      }
+    }
+    
+    
+    ## For the QQ-plot
+    xaxlab = c(0.75, 0.9, 0.95, 0.99)
+    for(cftInd in 1:ncol(obsStat)){
+      colname = colnames(obsStat)[cftInd]
+      
+      xlims = range(unlist(lapply(split(obsStat[[colname]], simdirs$n), quantileMarg, probs=xaxlab) ))
+      
+      plotData = lapply(split(cbind(simdirs, obsStat[colname]), simdirs$n), function(df){
+        quantiles = sapply(df$boots, function(x) quantileMarg(x[,colname], probs=xaxlab) )
+        #ylims = range(quantiles, na.rm=TRUE )
+        
+        x = quantileMarg(df[,colname], probs=xaxlab)
+        # first column is observed quantiles across the simulations
+        quantiles = cbind(x, quantiles)
+        return(quantiles)
+        #plot(x, ylim=ylims, xlim=xlims, type='n', ylab='', xlab='', main=paste0('n = ', df$n[1], '; ',  colname))
+        #axis(side=1, at=xaxt, labels=xaxlab)
+        #abline(v=xaxt, col='orange', lty=2)
+        #for(ind in 1:simConfig$nboot){
+        #  points(x, quantiles[,ind], type='l')
+        #}
+        #abline(a=0,b=1, col='blue')
+      })
+      ns = as.numeric(names(plotData))
+      plotData = as.data.frame(do.call(rbind, plotData))
+      plotData$n = rep(ns, each=length(xaxlab))
+      plotData$method = method
+      if(method == methods[1]){
+        qDFs[[colname]] = plotData
+      } else {
+        qDFs[[colname]] = rbind(qDFs[[colname]], plotData)
+      }
+    }
+    
+ 
+  }
+  #klDFs = lapply(klDFs, function(x){names(x)[-1] = methods; x})
+  return(list(error=plotDFs, qq=qDFs, tfce=tfce)) #KL=klDFs, 
+}
+
+
+errorPlots = function(plotData, nsim, tStat=TRUE, global=FALSE, alpha=0.1){
+  
+  # graphical parameters
+  cex=1.5
+  par(mgp=c(1.8,.7,0), lwd=1.5, lend=2, cex.lab=0.8*cex, cex.axis=0.8*cex, cex.main=0.6*cex, mfrow=c(1,1), mar=c(1.7,1.7,1.8,.5), bty='l', oma=c(2,2,2,0))
+  brewcols =  rep(RColorBrewer::brewer.pal(n=length(methods)/2, name='Dark2'), 2)
+  
+  lis = plotData[['error']]
+  stats = grep('Global', names(lis), invert=!global, value=TRUE)
+  if(!global){ # don't plot tfce for non global statistics
+    stats = grep('TFCE', stats, value=TRUE, invert=TRUE)
+  }
+  nplots = length(stats) * length(unique(lis[[stats[1]]]$n))
+  layout(matrix(1:(nplots), nrow=length(stats), byrow=TRUE) )
+  # for each type of statistic, make a row of plots
+  for(stat in stats){
+    # for each sample size, make a plot
+    lapply(split(lis[[stat]], lis[[stat]]$n), function(df){
+           n = df$n[1]
+           x = df$x
+           methods = names(df)[ ! names(df) %in% c('x', 'n')]
+           
+           methodnames = paste(ifelse(grepl('tStatmap', methods), 'Parametric', 'Robust'), ifelse(grepl('Norm', methods), 'Normal bootstrap', ifelse(grepl('Rad', methods), 'Rademacher bootstrap', 'Permutation') ) , sep="; ")
+           
+           # T-statistics
+           tmethodinds = grep('^tStatmap_', methods, invert=!tStat)
+           rang = range(c(df[,methods[tmethodinds]], x))
+           
+           plot(x, df[,methods[tmethodinds[1] ] ], type='b', xlim=rang, ylim=rang, ylab='', xlab='', main=paste0('n = ', n, '; ',  stat), col=brewcols[1])
+           for(ind in tmethodinds[-1]){
+             points(x, df[,methods[ind]], type='b', col=brewcols[ind])
+           }
+           points(x, qbinom(alpha/2, nsim, x)/nsim, type='l', lty=2, col='gray')
+           points(x, qbinom(1-alpha/2, nsim, x)/nsim, type='l', lty=2, col='gray')
+           abline(a=0,b=1, col='gray')
+           # hard-coded if statement
+           if(stat==stats[1] & n==25){
+           legend('bottomright', # Find suitable coordinates by trial and error
+                  c('NB', 'Perm', 'RB'), fill=brewcols[1:3], bty='n', cex=1.2)
+           }
+    })
+  }
+  mtext(ifelse(tStat, 'Parametric', 'Robust'), outer=TRUE, font=2)
+  mtext('Target type 1 error', outer=TRUE, side = 1)
+  mtext('Actual type 1 error', outer=TRUE, side=2)
+}
+
+
+
+klPlots = function(plotData, nsim, tStat=TRUE, global=FALSE, alpha=0.1){
+  
+  # graphical parameters
+  cex=1.5
+  par(mgp=c(1.8,.7,0), lwd=1.5, lend=2, cex.lab=0.8*cex, cex.axis=0.8*cex, cex.main=0.6*cex, mfrow=c(1,1), mar=c(1.7,1.7,1.8,.5), bty='l', oma=c(2,2,2,0))
+  
+  lis = plotData[['KL']]
+  stats = grep('Global', names(lis), invert=!global, value=TRUE)
+  nplots = length(stats) * length(unique(lis[[stats[1]]]$n))
+  layout(matrix(1:(nplots), nrow=length(stats), byrow=TRUE) )
+  # for each type of statistic, make a row of plots
+  for(stat in stats){
+    # for each sample size, make a plot
+    lapply(split(lis[[stat]], lis[[stat]]$n), function(df){
+           n = df$n[1]
+           methods = names(df)[ ! names(df) %in% c('x', 'n')]
+           
+           brewcols =  rep(RColorBrewer::brewer.pal(n=length(methods)/2, name='Dark2'), 2)
+           methodnames = paste(ifelse(grepl('tStatmap', methods), 'Parametric', 'Robust'), ifelse(grepl('Norm', methods), 'Normal bootstrap', ifelse(grepl('Rad', methods), 'Rademacher bootstrap', 'Permutation') ) , sep="; ")
+           
+           # T-statistics
+           tmethodinds = grep('^tStatmap_', methods, invert=!tStat)
+           #rang = range(c(df[,methods[tmethodinds]]))
+           
+           pm = as.matrix(df[,methods[tmethodinds]])
+           pm[is.infinite(pm)] = NA
+           vioplot::vioplot(pm, col = brewcols[tmethodinds],
+        xlab = "", ylab = "", main=paste0('n = ', n, '; ',  stat), names=c('NB', 'Perm', 'RB'))
+    })
+  
+  mtext(ifelse(tStat, 'Parametric', 'Robust'), outer=TRUE, font=2)
+  mtext('Method', outer=TRUE, side = 1)
+  mtext('KL Divergence', outer=TRUE, side=2)
+  }
+}
+
+
+
+qqPlots = function(plotData, nsim, tStat=TRUE, global=FALSE, alpha=0.1){
+  
+  # graphical parameters
+  cex=1.5
+  par(mgp=c(1.8,.7,0), lwd=1.5, lend=2, cex.lab=0.8*cex, cex.axis=0.8*cex, cex.main=0.6*cex, mfrow=c(1,1), mar=c(1.7,1.7,1.8,.5), bty='l', oma=c(2,2,2,0))
+  
+  lis = plotData[['qq']]
+  stats = grep('Global', names(lis), invert=!global, value=TRUE)
+  if(!global){ # don't plot tfce for non global statistics
+    stats = grep('TFCE', stats, value=TRUE, invert=TRUE)
+  }
+  nplots = length(stats) * length(unique(lis[[stats[1]]]$n))
+  layout(matrix(1:(nplots), nrow=length(stats), byrow=TRUE) )
+  # for each type of statistic, make a row of plots
+  for(stat in stats){
+          methods = unique(lis[[stat]]$method)
+          methodnames = paste(ifelse(grepl('tStatmap', methods), 'Parametric', 'Robust'), ifelse(grepl('Norm', methods), 'Normal bootstrap', ifelse(grepl('Rad', methods), 'Rademacher bootstrap', 'Permutation') ) , sep="; ")
+          brewcols =  rep(RColorBrewer::brewer.pal(n=length(methods)/2, name='Dark2'), 2)
+          # T-statistics
+          tmethodinds = grep('^tStatmap_', methods, invert=!tStat, value=TRUE)
+          yrang = quantile(unlist(lis[[stat]][lis[[stat]]$method %in% tmethodinds,2:(nsim+1)]), probs = c(0.01, 0.99))
+          xrang = range(lis[[stat]][lis[[stat]]$method %in% tmethodinds,1])
+    # for each sample size, make a plot
+    lapply(split(lis[[stat]], lis[[stat]]$n), function(df){
+           n = df$n[1]
+           x = df$x[df$method==tmethodinds[1]]
+           plot(x, df[df$method==tmethodinds[1], 2], type='n', xlim=xrang, ylim=yrang, ylab='', xlab='', main=paste0('n = ', n, '; ',  stat))
+           for(ind in 1:nsim){
+             points(x, df[df$method==tmethodinds[1], ind+1], type='l', lwd=0.5, col=brewcols[1]) # , col=brewcols[ind]
+             points(x, df[df$method==tmethodinds[2], ind+1], type='l', lwd=0.5, col=brewcols[2])
+             points(x, df[df$method==tmethodinds[3], ind+1], type='l', lwd=0.5, col=brewcols[3])
+           }
+           #points(x, qbinom(alpha/2, nsim, x)/nsim, type='l', lty=2, col='gray')
+           #points(x, qbinom(1-alpha/2, nsim, x)/nsim, type='l', lty=2, col='gray')
+           abline(a=0,b=1, col='gray')
+           # hard-coded if statement
+           if(stat==stats[1] & n==25){
+           legend('topleft', # Find suitable coordinates by trial and error
+                  c('NB', 'Perm', 'RB'), fill=brewcols[1:3], bty='n', cex=1.2)
+           }
+    })
+  }
+  mtext(ifelse(tStat, 'Parametric', 'Robust'), outer=TRUE, font=2)
+  mtext('Simulated quantiles', outer=TRUE, side = 1)
+  mtext('Resampled quantiles', outer=TRUE, side=2)
+}
+
+
+## ---- eval=FALSE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the marginal distribution of each topological feature (TF) of the parametric test statistics image."----
+## #pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+## pd = plotData(sexSimConfig$output)
+## nsim = fakeGroupSimConfig$nsim
+## errorPlots(pd, nsim=nsim, tStat = TRUE, global=FALSE)
+## 
+## #qqPlots(pd, nsim=nsim, tStat=TRUE, global=FALSE)
+
+
+## ---- eval=FALSE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the marginal distribution of each topological feature (TF) of the robust test statistics image."----
+## #pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+## errorPlots(pd, nsim=nsim, tStat = FALSE, global=FALSE)
+## 
+
+
+## ---- eval=FALSE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the marginal distribution of each topological feature (TF) of the parametric test statistics image."----
+## #pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+## qqPlots(pd, nsim=nsim, tStat = TRUE, global=FALSE)
+## 
+
+
+## ---- eval=FALSE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the marginal distribution of each topological feature (TF) of the robust test statistics image."----
+## #pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+## qqPlots(pd, nsim=nsim, tStat = FALSE, global=FALSE)
+## 
+
+
+## ---- eval=FALSE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the distribution of the global maximum of each topological feature (TF) of the parametric test statistics image."----
+## #pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+## errorPlots(pd, nsim=nsim, tStat = TRUE, global=TRUE)
+## 
+
+
+## ---- eval=FALSE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the distribution of the global maximum of each topological feature (TF) of the robust test statistics image."----
+## #pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+## errorPlots(pd, nsim=nsim, tStat = FALSE, global=TRUE)
+## 
+
+
+## ---- eval=FALSE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the distribution of the global maximum of each topological feature (TF) of the parametric test statistics image."----
+## #pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+## qqPlots(pd, nsim=nsim, tStat = TRUE, global=TRUE)
+## 
+
+
+## ---- eval=FALSE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the distribution of the global maximum of each topological feature (TF) of the robust test statistics image."----
+## #pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+## qqPlots(pd, nsim=nsim, tStat = FALSE, global=TRUE)
+## 
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the marginal distribution of each topological feature (TF) of the parametric test statistics image."----
+pd = plotData(fakeGroupSimConfig$output, stats=c("Maxima", "Mass; cft = 0.01", "Mass; cft = 0.001", "Extent; cft = 0.01", "Extent; cft = 0.001", "pTFCE"))
+nsim = fakeGroupSimConfig$nsim
+errorPlots(pd, nsim=nsim, tStat = TRUE, global=FALSE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the marginal distribution of each topological feature (TF) of the robust test statistics image."----
+errorPlots(pd, nsim=nsim, tStat = FALSE, global=FALSE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the marginal distribution of each topological feature (TF) of the parametric test statistics image."----
+qqPlots(pd, nsim=nsim, tStat = TRUE, global=FALSE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the marginal distribution of each topological feature (TF) of the robust test statistics image."----
+qqPlots(pd, nsim=nsim, tStat = FALSE, global=FALSE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the distribution of the global maximum of each topological feature (TF) of the parametric test statistics image."----
+errorPlots(pd, nsim=nsim, tStat = TRUE, global=TRUE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the distribution of the global maximum of each topological feature (TF) of the robust test statistics image."----
+errorPlots(pd, nsim=nsim, tStat = FALSE, global=TRUE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the distribution of the global maximum of each topological feature (TF) of the parametric test statistics image."----
+qqPlots(pd, nsim=nsim, tStat = TRUE, global=TRUE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the distribution of the global maximum of each topological feature (TF) of the robust test statistics image."----
+qqPlots(pd, nsim=nsim, tStat = FALSE, global=TRUE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the marginal distribution of each topological feature (TF) of the parametric test statistics image."----
+#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+pd = plotData(ageSplineSimConfig$output, stats=c("Maxima", "Mass; cft = 0.01", "Mass; cft = 0.001", "Extent; cft = 0.01", "Extent; cft = 0.001", "pTFCE"))
+nsim = ageSplineSimConfig$nsim
+errorPlots(pd, nsim=nsim, tStat = TRUE, global=FALSE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the marginal distribution of each topological feature (TF) of the robust test statistics image."----
+#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+errorPlots(pd, nsim=nsim, tStat = FALSE, global=FALSE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the marginal distribution of each topological feature (TF) of the parametric test statistics image."----
+#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+qqPlots(pd, nsim=nsim, tStat = TRUE, global=FALSE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the marginal distribution of each topological feature (TF) of the robust test statistics image."----
+#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+qqPlots(pd, nsim=nsim, tStat = FALSE, global=FALSE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the distribution of the global maximum of each topological feature (TF) of the parametric test statistics image."----
+#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+errorPlots(pd, nsim=nsim, tStat = TRUE, global=TRUE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the distribution of the global maximum of each topological feature (TF) of the robust test statistics image."----
+#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+errorPlots(pd, nsim=nsim, tStat = FALSE, global=TRUE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the distribution of the global maximum of each topological feature (TF) of the parametric test statistics image."----
+#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+qqPlots(pd, nsim=nsim, tStat = TRUE, global=TRUE)
+
+
+
+## ---- eval=TRUE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the distribution of the global maximum of each topological feature (TF) of the robust test statistics image."----
+#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
+qqPlots(pd, nsim=nsim, tStat = FALSE, global=TRUE)
+
+
+
+## ---- eval=FALSE--------------------------------------------------------------
+## knitr::kable(cbind(pd$tfce$tStatmap_pbjNormT, pd$tfce$HC3RobustStatmap_pbjNormT[,2]), format = 'latex')
+

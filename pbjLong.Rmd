@@ -9,7 +9,7 @@ output:
 ---
 
 ```{r setup, include=FALSE, cache=FALSE}
-knitr::opts_chunk$set(echo = FALSE, eval=TRUE, message=FALSE, warning=FALSE, fig.width=8, fig.height=10, cache=FALSE, dev = 'pdf')
+knitr::opts_chunk$set(echo = FALSE, eval=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=10, cache=FALSE, dev = 'pdf')
 path = Sys.getenv('PATH')
 path = Sys.setenv('PATH'=paste(path, '/home/rstudio/.local/bin', sep=':'))
 ```
@@ -92,9 +92,9 @@ simConfig = list(
   # vector of sample sizes to simulate
   ns = c(25, 50, 100, 200),
   # number of simulations to run
-  nsim=2,
+  nsim=100,
   # number of bootstraps
-  nboot = 5,
+  nboot = 500,
   # cluster forming thresholds
   cfts.s = c(0.1, 0.25, 0.4),
   cfts.p = c(0.01, 0.001),
@@ -125,6 +125,9 @@ simConfig = list(
   syntheticSqrt= '/media/disk2/pbj/pbj_ftest/sqrtMat.rds'
 )
 dat = dat[!apply(is.na(dat[,c('sex', 'age', 'race', 'group', 'time') ]), 1, any ), ]
+
+# tests the age effect
+simConfig$formred = simConfig$formred1
 
 #knitr::kable(as.data.frame(table1::table1(~ sex + age + race + time | group, data=dat)), format = 'latex')
 ```
@@ -269,7 +272,6 @@ simFunc = function(lmfull, lmred, mask, data, nboot, cfts.s=NULL, cfts.p=NULL, s
   unlink(list.files(tempdir(), full.names = TRUE))
   gc()
   unlink(simdirs)
-}
 stop('not an error. Finished simulations.')
 ```
 
@@ -611,74 +613,6 @@ qqPlots = function(plotData, nsim, tStat=TRUE, global=FALSE, alpha=0.1){
 ## Simulation results
 
 Details of the simulation analyses and evaluation metrics are given in Section 4 of the paper. This section presents results for all simulations for parametric and robust test statistics evaluating the marginal and global CDFs.
-
-## Sex covariate
-
-The effect of sex was removed from the imaging data using equation (13), and then bootstrap samples of the residuals were modeled as a function of sex and tested on one degree of freedom.
-Type 1 error rates and QQ-plot are given below.
-
-
-```{r, eval=FALSE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the marginal distribution of each topological feature (TF) of the parametric test statistics image."}
-#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
-pd = plotData(sexSimConfig$output)
-nsim = fakeGroupSimConfig$nsim
-errorPlots(pd, nsim=nsim, tStat = TRUE, global=FALSE)
-
-#qqPlots(pd, nsim=nsim, tStat=TRUE, global=FALSE)
-```
-
-```{r, eval=FALSE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the marginal distribution of each topological feature (TF) of the robust test statistics image."}
-#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
-errorPlots(pd, nsim=nsim, tStat = FALSE, global=FALSE)
-
-```
-
-
-```{r, eval=FALSE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the marginal distribution of each topological feature (TF) of the parametric test statistics image."}
-#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
-qqPlots(pd, nsim=nsim, tStat = TRUE, global=FALSE)
-
-```
-
-```{r, eval=FALSE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the marginal distribution of each topological feature (TF) of the robust test statistics image."}
-#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
-qqPlots(pd, nsim=nsim, tStat = FALSE, global=FALSE)
-
-```
-
-
-
-
-
-### Global distributions
-
-```{r, eval=FALSE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the distribution of the global maximum of each topological feature (TF) of the parametric test statistics image."}
-#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
-errorPlots(pd, nsim=nsim, tStat = TRUE, global=TRUE)
-
-```
-
-```{r, eval=FALSE, fig.width=8, fig.height=10, fig.cap="Actual versus target type 1 error rates for the inference procedures considered for testing the distribution of the global maximum of each topological feature (TF) of the robust test statistics image."}
-#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
-errorPlots(pd, nsim=nsim, tStat = FALSE, global=TRUE)
-
-```
-
-
-
-```{r, eval=FALSE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the distribution of the global maximum of each topological feature (TF) of the parametric test statistics image."}
-#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
-qqPlots(pd, nsim=nsim, tStat = TRUE, global=TRUE)
-
-```
-
-```{r, eval=FALSE, fig.width=8, fig.height=10, fig.cap="QQ-plot for the inference procedures considered for the distribution of the global maximum of each topological feature (TF) of the robust test statistics image."}
-#pdf('~/Dropbox (VUMC)/pbj/pbj_ftest/df2_fakePolynomial.pdf')
-qqPlots(pd, nsim=nsim, tStat = FALSE, global=TRUE)
-
-```
-
-
 
 
 ## Fake group variable

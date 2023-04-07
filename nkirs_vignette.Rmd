@@ -258,7 +258,7 @@ The last three arguments are default values and adjust how the statistics are co
 ```{r robustStat, message=FALSE}
 # lmPBJ -- fits the model and computes the statistical image for the covariate of interest
 ## using robust test statistics (`robust = TRUE`)
-robustStatMap <- lmPBJ(dat$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat, robust = TRUE, HC3 = TRUE, transform = 'none')
+robustStatMap <- lmPBJ(dat$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat, robust = TRUE, HC3 = TRUE, transform = 't')
 ```
 
 The result from this command is an object of class `statMap` that contains the following objects:
@@ -355,7 +355,7 @@ The final command saves the results in an Rdata file for future use.
 
 In the code below, we use the `pbjInferenceBG` command to run the boostrapping in the background. This uses the `r_bg` function from the `callr` package to run the command in the background, so that we can continue to use this session.
 ```{r CEI, eval=TRUE}
-# NEED TO EDIT THIS STILL.
+
 if(!file.exists(pbjdatafile)){
   rcallResPBJ <- pbjInferenceBG(robustStatMap, rdata_rds=pbjdatafile, nboot = nboot, method='wild', mask = robustStatMap$mask, cft = cft)
 }
@@ -513,6 +513,74 @@ plotResults = function(statMap,  emForm=NULL, method='CEI', roiInds=NULL, ind=1,
 plotResults(robustStatMap, roiInds = 1:4)
 
 ```
+# Split sample analysis
+
+To compare the replicability of parametric and robust test statistics I fit split the sample and compared concordance across the results from the two samples.
+
+```{r splitSample}
+CATplot <-function(vec1,vec2,maxrank=5000,make.plot=TRUE,...){ 
+  ##----------------------------------------------------------------------
+  ##----------------------------------------------------------------------
+  ##Fuction for Concordance at the Top plots
+  ##----------------------------------------------------------------------
+  ## vec1 and vec2: ranked lists to use for CAT plot
+  ## maxrank: only go up to maxrank
+  ## make.plot: if TRUE, the plot will be made
+  ## ...: arguments passed on to plot
+  ##----------------------------------------------------------------------  
+  if(class(vec1)=="numeric" & class(vec2)=="numeric" & !is.null(names(vec1)) & !is.null(names(vec1)))
+    {
+      vec1 <- sort(vec1)
+      vec1 <- names(vec1)
+      vec2 <- sort(vec2)
+      vec2 <- names(vec2)
+    }
+  if(is.na(maxrank) | is.null(maxrank) | maxrank > min(length(vec1),length(vec2)))
+    {
+      maxrank <- min(length(vec1),length(vec2))
+    }
+  output <- data.frame(rank=1:maxrank,
+                       concordance=NA)
+  output$concordance = sapply(1:maxrank, function(i){length(intersect(vec1[1:i],vec2[1:i]))/i })
+  if(make.plot){
+    plot(concordance~rank,data=output,type='l',...)
+    abline(a=0,b=1/min(length(vec1),length(vec2)),lty=2)
+  }
+  return(output)
+}
+
+set.seed(1234)
+#lmfull = paste0(" ~+ ns(age, df=4) + sex" )
+#lmred = paste0(" ~ sex + race" )
+inds = sample(nrow(dat), round(nrow(dat)/2))
+dat1 = dat[inds, ]
+dat2 = dat[ -inds,]
+
+lmfull = paste0(" ~ sex * ns(age, df=4)" )
+lmred = paste0(" ~ sex + ns(age, df = 4)" )
+robustStatMap1 <- lmPBJ(dat1$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat1, transform = 't', HC3 = TRUE, robust = TRUE)
+robustStatMap2 <- lmPBJ(dat2$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat2, transform = 't', HC3 = TRUE, robust = TRUE)
 
 
-## Appendix
+paramStatMap1 = lmPBJ(dat1$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat1, transform = 't', HC3 = TRUE, robust = FALSE)
+paramStatMap2 = lmPBJ(dat2$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat2, transform = 't', HC3 = TRUE, robust = FALSE)
+```
+
+```{r splitSampleAge}
+lmfull = paste0(" ~ sex + ns(age, df=4)" )
+lmred = paste0(" ~ sex" )
+robustStatMap1 <- lmPBJ(dat1$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat1, transform = 't', HC3 = TRUE, robust = TRUE)
+robustStatMap2 <- lmPBJ(dat2$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat2, transform = 't', HC3 = TRUE, robust = TRUE)
+
+
+paramStatMap1 = lmPBJ(dat1$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat1, transform = 't', HC3 = TRUE, robust = FALSE)
+paramStatMap2 = lmPBJ(dat2$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat2, transform = 't', HC3 = TRUE, robust = FALSE)
+
+robustCat = CATplot(rank(robustStatMap1$stat), rank(robustStatMap2$stat), maxrank = 50000, make.plot=FALSE)
+paramCat = CATplot(rank(paramStatMap1$stat), rank(paramStatMap2$stat), maxrank = 50000, make.plot=FALSE)
+
+plot(robustCat, bty='n', type='l')
+lines(paramCat, col='red')
+abline(a=0, b=1/length(paramStatMap1$stat), lty=2)
+```
+# Appendix

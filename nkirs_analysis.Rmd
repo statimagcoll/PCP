@@ -147,7 +147,7 @@ This command fits the model across the image assuming that the errors are homosk
 ```{r}
 # image(paramStatMap)
 # lmPBJ -- fits the model and computes the statistical image for the covariate of interest
-paramStatMap = lmPBJ(dat$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat, transform = 'none', HC3 = TRUE, robust = FALSE)
+paramStatMap = lmPBJ(dat$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat, transform = 't', HC3 = TRUE, robust = FALSE)
 # Visualize the chi square image
 # statmapFile = paste0(tempfile(), '.nii.gz') # generate a random file name
 # writeNifti(stat.statMap(paramStatMap), file=statmapFile) # write the statistical image
@@ -162,12 +162,71 @@ This model formula uses robust statistics, which does not assume the spatial cov
 ```{r}
 # lmPBJ -- fits the model and computes the statistical image for the covariate of interest
 ## using robust test statistics (`robust = TRUE`)
-robustStatMap <- lmPBJ(dat$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat, transform = 'none', HC3 = TRUE, robust = TRUE)
+robustStatMap <- lmPBJ(dat$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat, transform = 't', HC3 = TRUE, robust = TRUE)
 # Visualize the chi square image
 # statmapFile = paste0(tempfile(), '.nii.gz') # generate a random file name
 # writeNifti(stat.statMap(robustStatMap), file=statmapFile) # write the statistical image
 # papayar::papaya(c(template, statmapFile )) # view the statistical image
 ```
+
+## Split sample CAT plot
+
+Reviewers asked to add an analysis splitting the sample and comparing the results across the two sample. I'm doing that here using a concordance at the top plot.
+
+
+```{r}
+#lmfull = paste0(" ~ race + ns(age, df=4) + sex" )
+#lmred = paste0(" ~ sex + race" )
+lmfull = paste0(" ~ race + ns(age, df=4) * sex" )
+lmred = paste0(" ~ sex + race + ns(age, df = 4)" )
+inds = sample(nrow(dat), round(nrow(dat)/2))
+dat1 = dat[inds, ]
+dat2 = dat[ -inds,]
+robustStatMap1 <- lmPBJ(dat1$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat1, transform = 't', HC3 = TRUE, robust = TRUE)
+robustStatMap2 <- lmPBJ(dat2$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat2, transform = 't', HC3 = TRUE, robust = TRUE)
+
+
+paramStatMap1 = lmPBJ(dat1$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat1, transform = 't', HC3 = TRUE, robust = FALSE)
+paramStatMap2 = lmPBJ(dat2$files, form=lmfull, formred=lmred, mask=maskfile, template = templatefile, data=dat2, transform = 't', HC3 = TRUE, robust = FALSE)
+
+
+CATplot <-function(vec1,vec2,maxrank=5000,make.plot=TRUE,...){ 
+  ##----------------------------------------------------------------------
+  ##----------------------------------------------------------------------
+  ##Fuction for Concordance at the Top plots
+  ##----------------------------------------------------------------------
+  ## vec1 and vec2: ranked lists to use for CAT plot
+  ## maxrank: only go up to maxrank
+  ## make.plot: if TRUE, the plot will be made
+  ## ...: arguments passed on to plot
+  ##----------------------------------------------------------------------  
+  if(class(vec1)=="numeric" & class(vec2)=="numeric" & !is.null(names(vec1)) & !is.null(names(vec1)))
+    {
+      vec1 <- sort(vec1)
+      vec1 <- names(vec1)
+      vec2 <- sort(vec2)
+      vec2 <- names(vec2)
+    }
+  if(is.na(maxrank) | is.null(maxrank) | maxrank > min(length(vec1),length(vec2)))
+    {
+      maxrank <- min(length(vec1),length(vec2))
+    }
+  output <- data.frame(rank=1:maxrank,
+                       concordance=NA)
+  output$concordance = sapply(1:maxrank, function(i){length(intersect(vec1[1:i],vec2[1:i]))/i })
+  if(make.plot){
+    plot(concordance~rank,data=output,type='l',...)
+    abline(a=0,b=1/min(length(vec1),length(vec2)),lty=2)
+  }
+  return(output)
+}
+
+
+#CATplot(rank(robustStatMap1$stat), rank(robustStatMap2$stat), maxrank = 1000)
+#CATplot(rank(paramStatMap1$stat), rank(paramStatMap2$stat), maxrank = 200)
+#plot(paramStatMap1$stat, paramStatMap2$stat)
+```
+
 
 # pbjInference
 
