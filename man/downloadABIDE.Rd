@@ -4,10 +4,26 @@
 \alias{downloadABIDE}
 \title{Download ABIDE data for analysis.}
 \usage{
-downloadABIDE(outdir, force = FALSE)
+downloadABIDE(
+  outdir,
+  derivatives = c("alff", "func_mask"),
+  pipelines = "cpac",
+  strategies = "filt_global",
+  force = FALSE
+)
 }
 \arguments{
 \item{outdir}{A directory to save the output files.}
+
+\item{derivatives}{Objects to download from the data respository. All derivatives: alff | degree_binarize | degree_weighted | dual_regression |
+eigenvector_binarize | eigenvector_weighted | falff | func_mask |
+func_mean | func_preproc | lfcd | reho | rois_aal | rois_cc200 |
+rois_cc400 | rois_dosenbach160 | rois_ez | rois_ho | rois_tt | vmhc}
+
+\item{pipelines}{What processing pipeline to use.  All pipelines: ccs | cpac | dparsf | niak}
+
+\item{strategies}{What processing strategy to use. All strategies: filt_global | filt_noglobal | nofilt_global |
+nofilt_noglobal}
 
 \item{force}{Always re-download existing files.}
 }

@@ -48,11 +48,19 @@ downloadABIDEFile <- function(md5list, url, destfile, force) {
 #' Download ABIDE data for analysis.
 #'
 #' @param outdir A directory to save the output files.
+#' @param derivatives Objects to download from the data respository. All derivatives: alff | degree_binarize | degree_weighted | dual_regression |
+#'   eigenvector_binarize | eigenvector_weighted | falff | func_mask |
+#'   func_mean | func_preproc | lfcd | reho | rois_aal | rois_cc200 |
+#'   rois_cc400 | rois_dosenbach160 | rois_ez | rois_ho | rois_tt | vmhc
+#' @param pipelines What processing pipeline to use.  All pipelines: ccs | cpac | dparsf | niak
+#' @param strategies What processing strategy to use. All strategies: filt_global | filt_noglobal | nofilt_global |
+#'   nofilt_noglobal
 #' @param force Always re-download existing files.
 #' @return Returns a data frame of ABIDE demographic data.
 #' @importFrom utils read.csv
 #' @export
-downloadABIDE <- function(outdir, force = FALSE) {
+downloadABIDE <- function(outdir, derivatives=c("alff", "func_mask"),
+pipelines='cpac', strategies="filt_global", force = FALSE) {
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
   }
