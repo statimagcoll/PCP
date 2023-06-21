@@ -1,46 +1,21 @@
-checkABIDEFile <- function(md5list, destfile, stopOnFailure = FALSE) {
-  md5 <- md5list[destfile]
-  if (is.na(md5)) {
-    stop("Missing md5sum: ", destfile)
-  }
-  if (file.exists(destfile)) {
-    if (tools::md5sum(destfile) == md5) {
-      return(TRUE)
-    }
-    # always show a message if md5sum doesn't match
-    if (stopOnFailure) {
-      stop("Invalid md5sum: ", destfile)
-    } else {
-      message("Invalid md5sum: ", destfile)
-    }
-  } else if (stopOnFailure) {
-    stop("File doesn't exist: ", destfile)
-  }
-  return(FALSE)
-}
-
 #' Download ABIDE data for analysis.
 #'
-#' @param md5list Undocumented arguments from Jeremy.
 #' @param url Undocumented arguments from Jeremy.
 #' @param destfile Undocumented arguments from Jeremy.
 #' @param force Undocumented arguments from Jeremy.
 #' @return Returns a file?
 #' @importFrom httr write_disk
-downloadABIDEFile <- function(md5list, url, destfile, force) {
+#'
+#' @examples
+#'
+#' # downloadABIDE('./', derivatives='falff')
+downloadABIDEFile <- function(url, destfile, force) {
   fetch <- force || !file.exists(destfile)
-  if (!fetch && !checkABIDEFile(md5list, destfile)) {
-    fetch <- TRUE
-  }
-
   if (fetch) {
     message("Downloading ", destfile, "...")
     res <- httr::GET(url, write_disk(destfile, overwrite = TRUE))
     if (res$status != 200) {
       stop("Failed to fetch url: ", url)
-    }
-    else {
-      checkABIDEFile(md5list, destfile, stopOnFailure = TRUE)
     }
   }
 }
@@ -67,12 +42,6 @@ pipelines='cpac', strategies="filt_global", force = FALSE) {
   oldwd <- setwd(outdir)
   on.exit(setwd(oldwd), add = TRUE)
 
-  # create md5 vector for platform
-  md5ABIDE <- readRDS(file.path(find.package("NIsim"), "extdata", "md5ABIDE.rds"))
-  md5list <- sapply(md5ABIDE, function(entry) {
-    structure(entry$md5, names = do.call(file.path, entry$parts))
-  })
-
   # download demographic info
   demodir <- file.path("abide", "demographic")
   if (!dir.exists(demodir)) {
@@ -82,7 +51,7 @@ pipelines='cpac', strategies="filt_global", force = FALSE) {
   # See http://preprocessed-connectomes-project.org/abide/download.html
   metafile <- file.path(demodir, "Phenotypic_V1_0b_preprocessed1.csv")
   metaurl <- "https://s3.amazonaws.com/fcp-indi/data/Projects/ABIDE_Initiative/Phenotypic_V1_0b_preprocessed1.csv"
-  downloadABIDEFile(md5list, metaurl, metafile, force)
+  downloadABIDEFile(metaurl, metafile, force)
 
   meta <- read.csv(metafile, na.strings = c("-9999", ""))
   names(meta) <- tolower(names(meta))
@@ -105,10 +74,9 @@ pipelines='cpac', strategies="filt_global", force = FALSE) {
 
   # copy template file if needed
   templatefile <- file.path(neurodir, "MNI152_T1_3mm.nii.gz")
-  if (!checkABIDEFile(md5list, templatefile)) {
+  if (!exists(templatefile)) {
     srcfile <- file.path(find.package("NIsim"), "extdata", "MNI152_T1_3mm.nii.gz")
     file.copy(srcfile, templatefile, overwrite = TRUE)
-    checkABIDEFile(md5list, templatefile, stopOnFailure = TRUE)
   }
 
   # compile list of files to fetch
@@ -130,7 +98,7 @@ pipelines='cpac', strategies="filt_global", force = FALSE) {
 
   # download files if needed
   for (i in 1:nrow(files)) {
-    downloadABIDEFile(md5list, files$url[i], files$destfile[i], force)
+    downloadABIDEFile(files$url[i], files$destfile[i], force)
   }
 
   return(meta)

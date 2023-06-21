@@ -4,11 +4,9 @@
 \alias{downloadABIDEFile}
 \title{Download ABIDE data for analysis.}
 \usage{
-downloadABIDEFile(md5list, url, destfile, force)
+downloadABIDEFile(url, destfile, force)
 }
 \arguments{
-\item{md5list}{Undocumented arguments from Jeremy.}
-
 \item{url}{Undocumented arguments from Jeremy.}
 
 \item{destfile}{Undocumented arguments from Jeremy.}
@@ -20,4 +18,8 @@ Returns a file?
 }
 \description{
 Download ABIDE data for analysis.
+}
+\examples{
+
+# downloadABIDE('./', derivatives='falff')
 }
