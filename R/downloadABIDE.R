@@ -111,19 +111,6 @@ pipelines='cpac', strategies="filt_global", force = FALSE) {
     checkABIDEFile(md5list, templatefile, stopOnFailure = TRUE)
   }
 
-  # all pipelines: ccs | cpac | dparsf | niak
-  pipelines <- c("cpac")
-
-  # all strategies: filt_global | filt_noglobal | nofilt_global |
-  #   nofilt_noglobal
-  strategies <- "filt_global"
-
-  # all derivatives: alff | degree_binarize | degree_weighted | dual_regression |
-  #   eigenvector_binarize | eigenvector_weighted | falff | func_mask |
-  #   func_mean | func_preproc | lfcd | reho | rois_aal | rois_cc200 |
-  #   rois_cc400 | rois_dosenbach160 | rois_ez | rois_ho | rois_tt | vmhc
-  derivatives <- c("alff", "func_mask")
-
   # compile list of files to fetch
   # NOTE: excluding strategy from destination directory structure since there's
   #       only 1
