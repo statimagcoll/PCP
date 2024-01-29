@@ -10,7 +10,7 @@ ABIDE(
   pipelines = "cpac",
   strategies = "filt_global",
   force = FALSE,
-  QAremove = FALSE,
+  QCremove = FALSE,
   file_ids,
   ...
 )
@@ -32,9 +32,9 @@ nofilt_noglobal}
 
 \item{force}{Always re-download existing files.}
 
-\item{...}{Arguments passed to mclapply}
-
 \item{QCremove}{Remove using quality checks.}
+
+\item{...}{Arguments passed to mclapply}
 }
 \value{
 Returns a data frame of ABIDE demographic data and paths to the files.
