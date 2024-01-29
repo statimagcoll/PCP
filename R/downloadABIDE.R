@@ -44,7 +44,7 @@ downloadABIDEFile <- function(url, destfile, force) {
 #' @importFrom parallel mcmapply
 #' @export
 ABIDE <- function(outdir, derivatives=c("alff", "func_mask"),
-pipelines='cpac', strategies="filt_global", force = FALSE, QAremove=FALSE, file_ids, ...) {
+pipelines='cpac', strategies="filt_global", force = FALSE, QCremove=FALSE, file_ids, ...) {
   derivatives = unique(derivatives)
   # To manage URL locations for different data types.
   funcDerivatives = c("alff", "degree_binarize", "degree_weighted", "dual_regression", "eigenvector_binarize", "eigenvector_weighted", "falff", "func_mask", "
@@ -94,7 +94,7 @@ pipelines='cpac', strategies="filt_global", force = FALSE, QAremove=FALSE, file_
 
   # exclude records without files and/or with poor quality control ratings
   meta = subset(meta, file_id != "no_filename")
-  if(QAremove){
+  if(QCremove){
     meta <- subset(meta,
                     (
                      qc_func_rater_2 != "fail" | qc_anat_rater_2 != "fail" |
