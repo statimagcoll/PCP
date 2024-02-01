@@ -11,7 +11,6 @@ ABIDE(
   strategies = "filt_global",
   force = FALSE,
   QCremove = FALSE,
-  file_ids,
   ...
 )
 }
