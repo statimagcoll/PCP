@@ -150,7 +150,6 @@ pipelines='cpac', strategies="filt_global", force = FALSE, QCremove=FALSE, ...) 
     dir.create(destdirs[i], recursive = TRUE)
   }
 
-  browser()
   # download files if needed
   files$success = unlist(mcmapply(downloadABIDEFile, url=files$url, destfile=files$destfile, MoreArgs=c('force'=force, list(...) ) ))
 
