@@ -42,6 +42,7 @@ downloadABIDEFile <- function(url, destfile, force) {
 #' @return Returns a data frame of ABIDE demographic data and paths to the files.
 #' @importFrom utils read.csv
 #' @importFrom parallel mcmapply
+#' @importFrom stats reshape
 #' @export
 ABIDE <- function(outdir, derivatives=c("alff", "func_mask"),
 pipelines='cpac', strategies="filt_global", force = FALSE, QCremove=FALSE, ...) {
@@ -79,7 +80,7 @@ pipelines='cpac', strategies="filt_global", force = FALSE, QCremove=FALSE, ...) 
   on.exit(setwd(oldwd), add = TRUE)
 
   # download demographic info
-  demodir <- file.path("abide", "demographic")
+  demodir <- file.path(outdir, "demographic")
   if (!dir.exists(demodir)) {
     dir.create(demodir, recursive = TRUE)
   }

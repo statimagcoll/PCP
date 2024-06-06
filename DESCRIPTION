@@ -1,25 +1,17 @@
-Package: NIsim
+Package: PCP
 Type: Package
-Title: Neuroimaging simulation tools
+Title: Preprocessed Connectomes Project Download Functions
 Version: 0.1.0
-Authors@R: person("Simon", "Vandekar", email="simon.vandekar@vanderbilt.edu", role=c('aut', 'cre'))
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
+Authors@R: person("Simon", "Vandekar", email="simon.vandekar@vumc.org", role=c('aut', 'cre'))
+Description: This package downloads data from the preprocessed ABIDE data https://preprocessed-connectomes-project.org/abide/.
 License: GPL-3
 Encoding: UTF-8
 Collate:
   'downloadABIDE.R'
-  'genSimData.R'
-  'master.R'
-  'residualizeImages.R'
 Imports:
-  lme4,
-  parallel,
-  pbapply,
-  pbj,
-  pbmcapply,
-  RNifti
+  httr,
+  parallel
 Depends:
-  httr
+  R (>= 3.3)
 LazyData: true
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.1
