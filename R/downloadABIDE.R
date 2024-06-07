@@ -116,7 +116,7 @@ pipelines='cpac', strategies="filt_global", force = FALSE, QCremove=FALSE, ...) 
   # copy template file if needed
   templatefile <- file.path(neurodir, "MNI152_T1_3mm.nii.gz")
   if (!exists(templatefile)) {
-    srcfile <- file.path(find.package("NIsim"), "extdata", "MNI152_T1_3mm.nii.gz")
+    srcfile <- file.path(find.package("PCP"), "extdata", "MNI152_T1_3mm.nii.gz")
     file.copy(srcfile, templatefile, overwrite = TRUE)
   }
 
