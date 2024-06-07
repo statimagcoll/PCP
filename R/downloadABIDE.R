@@ -153,7 +153,7 @@ pipelines='cpac', strategies="filt_global", force = FALSE, QCremove=FALSE, ...) 
   if(any(grepl('mc.cores', names(list(...))))){
     files$success = unlist(mcmapply(downloadABIDEFile, url=files$url, destfile=files$destfile, MoreArgs=c('force'=force, list(...) ) ))
   } else {
-    files$success = unlist(mapply(downloadABIDEFile, url=files$url, destfile=files$destfile, MoreArgs=c('force'=force) ))
+    files$success = unlist(mapply(downloadABIDEFile, url=files$url, destfile=files$destfile, MoreArgs=list('force'=force) ))
   }
 
   rfiles = reshape(files, v.names = c('destdir', 'url', 'destfile', 'filename', 'success'),
