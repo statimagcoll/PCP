@@ -38,7 +38,7 @@ downloadABIDEFile <- function(url, destfile, force) {
 #'   nofilt_noglobal
 #' @param force Always re-download existing files.
 #' @param QCremove Remove using quality checks.
-#' @param ... Arguments passed to mclapply
+#' @param ... Arguments passed to mcmapply
 #' @return Returns a data frame of ABIDE demographic data and paths to the files.
 #' @importFrom utils read.csv
 #' @importFrom parallel mcmapply
@@ -149,8 +149,12 @@ pipelines='cpac', strategies="filt_global", force = FALSE, QCremove=FALSE, ...) 
     dir.create(destdirs[i], recursive = TRUE)
   }
 
-  # download files if needed
-  files$success = unlist(mcmapply(downloadABIDEFile, url=files$url, destfile=files$destfile, MoreArgs=c('force'=force, list(...) ) ))
+  # download files if needed. Run in parallel if mc.cores is specified
+  if(any(grepl('mc.cores', names(list(...))))){
+    files$success = unlist(mcmapply(downloadABIDEFile, url=files$url, destfile=files$destfile, MoreArgs=c('force'=force, list(...) ) ))
+  } else {
+    files$success = unlist(mapply(downloadABIDEFile, url=files$url, destfile=files$destfile ))
+  }
 
   rfiles = reshape(files, v.names = c('destdir', 'url', 'destfile', 'filename', 'success'),
                    timevar='derivative', idvar='file_id', direction='wide', sep='_')

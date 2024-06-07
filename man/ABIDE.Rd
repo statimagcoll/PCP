@@ -33,7 +33,7 @@ nofilt_noglobal}
 
 \item{QCremove}{Remove using quality checks.}
 
-\item{...}{Arguments passed to mclapply}
+\item{...}{Arguments passed to mcmapply}
 }
 \value{
 Returns a data frame of ABIDE demographic data and paths to the files.
