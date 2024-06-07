@@ -76,8 +76,6 @@ pipelines='cpac', strategies="filt_global", force = FALSE, QCremove=FALSE, ...) 
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
   }
-  oldwd <- setwd(outdir)
-  on.exit(setwd(oldwd), add = TRUE)
 
   # download demographic info
   demodir <- file.path(outdir, "demographic")
@@ -108,7 +106,7 @@ pipelines='cpac', strategies="filt_global", force = FALSE, QCremove=FALSE, ...) 
   meta$dx_group <- factor(meta$dx_group, labels = c("asd", "hc"))
 
   # create directory for imaging data
-  neurodir <- file.path("abide", "neuroimaging")
+  neurodir <- file.path(outdir, "neuroimaging")
   if (!dir.exists(neurodir)) {
     dir.create(neurodir)
   }
