@@ -71,7 +71,11 @@ pipelines='cpac', strategies="filt_global", force = FALSE, QCremove=FALSE, ...) 
                                 'rh.smoothwm.nofix', 'rh.sphere', 'rh.sphere.reg', 'rh.sulc', 'rh.sulc.fsaverage.mgh', 'rh.sulc.fsaverage.mris_preproc.log', 'rh.sulc.fwhm0.fsaverage.mgh', 'rh.sulc.fwhm10.fsaverage.mgh', 'rh.sulc.fwhm15.fsaverage.mgh', 'rh.sulc.fwhm20.fsaverage.mgh', 'rh.sulc.fwhm25.fsaverage.mgh',
                                 'rh.sulc.fwhm5.fsaverage.mgh', 'rh.thickness', 'rh.thickness.fsaverage.mgh', 'rh.thickness.fsaverage.mris_preproc.log', 'rh.thickness.fwhm0.fsaverage.mgh', 'rh.thickness.fwhm10.fsaverage.mgh', 'rh.thickness.fwhm15.fsaverage.mgh', 'rh.thickness.fwhm20.fsaverage.mgh', 'rh.thickness.fwhm25.fsaverage.mgh',
                                 'rh.thickness.fwhm5.fsaverage.mgh', 'rh.volume', 'rh.volume.fsaverage.mgh', 'rh.volume.fsaverage.mris_preproc.log', 'rh.volume.fwhm0.fsaverage.mgh', 'rh.volume.fwhm10.fsaverage.mgh', 'rh.volume.fwhm15.fsaverage.mgh', 'rh.volume.fwhm20.fsaverage.mgh', 'rh.volume.fwhm25.fsaverage.mgh', 'rh.volume.fwhm5.fsaverage.mgh', 'rh.white'))
-  fsfiles = c(labeldir, mridir, scriptsdir, statsdir,surfdir)
+  fsfiles = c(labeldir, mridir, scriptsdir, statsdir, surfdir)
+  if(tolower(derivatives[1])=='freesurferstats'){
+    derivatives='freesurfer'
+    fsfiles=statsdir
+  }
 
   if (!dir.exists(outdir)) {
     dir.create(outdir, recursive = TRUE)
